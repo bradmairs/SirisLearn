@@ -1,3 +1,3 @@
 """The SirisLearn version (scripts/bump-version.sh keeps it in step with /VERSION)."""
 
-VERSION = "1.0"
+VERSION = "1.01"
