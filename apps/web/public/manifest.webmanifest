@@ -1,0 +1,13 @@
+{
+  "name": "SirisLearn",
+  "short_name": "SirisLearn",
+  "description": "Courses on anything you want to learn, a lesson and a quiz at a time.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    { "src": "/siris-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

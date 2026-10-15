@@ -1,0 +1,14 @@
+services:
+  sirislearn:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sirislearn
+    env_file: .env
+    environment:
+      SIRISLEARN_DATA_PATH: /app/data
+    ports:
+      - "${SIRISLEARN_BIND:-0.0.0.0}:${SIRISLEARN_PORT:-8100}:8000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

@@ -1,0 +1,77 @@
+import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { ChevronDown, Sparkles } from "lucide-react";
+import { post } from "../api/client";
+import type { CourseCard, Length, Level } from "../api/types";
+import { Glass } from "./Glass";
+
+const LEVELS: { id: Level; label: string }[] = [
+  { id: "beginner", label: "Beginner" },
+  { id: "intermediate", label: "Intermediate" },
+  { id: "advanced", label: "Advanced" },
+];
+const LENGTHS: { id: Length; label: string; hint: string }[] = [
+  { id: "short", label: "Short", hint: "about 6 lessons" },
+  { id: "standard", label: "Standard", hint: "about 14 lessons" },
+  { id: "deep", label: "Deep dive", hint: "about 24 lessons" },
+];
+const IDEAS = ["How black holes form", "Personal finance basics", "Stoic philosophy", "Machine learning fundamentals", "Wine tasting", "Structural engineering for bridges"];
+
+/** "What do you want to learn?" A topic, a level and a size become a course. */
+export function NewCourse({ compact = false }: { compact?: boolean }) {
+  const navigate = useNavigate();
+  const [topic, setTopic] = useState("");
+  const [level, setLevel] = useState<Level>("beginner");
+  const [length, setLength] = useState<Length>("standard");
+  const [notes, setNotes] = useState("");
+  const [more, setMore] = useState(!compact);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (topic.trim().length < 2) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const course = await post<CourseCard>("/api/courses", { topic: topic.trim(), level, length, notes: notes.trim() });
+      navigate(`/course/${course.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't start the course.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Glass as="form" className="new-course" onSubmit={submit} aria-label="Start a new course">
+      <label className="new-course__label" htmlFor="topic">What do you want to learn?</label>
+      <div className="new-course__row">
+        <Sparkles className="new-course__spark" aria-hidden="true" />
+        <input id="topic" className="new-course__input" placeholder={IDEAS[new Date().getDate() % IDEAS.length]} value={topic}
+          onChange={(e) => setTopic(e.target.value)} onFocus={() => setMore(true)} maxLength={300} autoComplete="off" />
+        <Glass as="button" type="submit" variant="tint" shape="pill" interactive className="button button--small" disabled={busy || topic.trim().length < 2}>
+          {busy ? "Starting…" : "Create"}
+        </Glass>
+      </div>
+      {more && (
+        <div className="new-course__options">
+          <div className="chip-row" role="radiogroup" aria-label="Level">
+            {LEVELS.map((l) => (
+              <button key={l.id} type="button" role="radio" aria-checked={level === l.id} className={`chip chip--button ${level === l.id ? "chip--active" : ""}`} onClick={() => setLevel(l.id)}>{l.label}</button>
+            ))}
+          </div>
+          <div className="chip-row" role="radiogroup" aria-label="Course size">
+            {LENGTHS.map((l) => (
+              <button key={l.id} type="button" role="radio" aria-checked={length === l.id} title={l.hint} className={`chip chip--button ${length === l.id ? "chip--active" : ""}`} onClick={() => setLength(l.id)}>{l.label}</button>
+            ))}
+          </div>
+          <details className="new-course__notes">
+            <summary>Anything to focus on or skip? <ChevronDown size={14} aria-hidden="true" /></summary>
+            <textarea className="field" rows={3} maxLength={2000} placeholder="e.g. I'm an engineer, go heavy on the maths; skip the history." value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </details>
+        </div>
+      )}
+      {error && <div className="error-banner" role="alert">{error}</div>}
+    </Glass>
+  );
+}
