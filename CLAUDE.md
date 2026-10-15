@@ -6,6 +6,7 @@ SirisOS conventions: same design system, same versioning.
 ## Versions and shipping
 
 - **Bump the version in every pull request**: `scripts/bump-version.sh patch` (+0.01) for fixes and small changes, `scripts/bump-version.sh minor` (+0.1) for a new feature or screen. Fill in the `docs/releases/<version>.md` it starts. See [docs/releases.md](docs/releases.md).
+- **Merge to main automatically** (Brad's standing instruction): open the pull request, wait for CI to go green, then mark it ready and merge it (squash) without asking. Fix red CI first; never merge red.
 - Merging a `VERSION` change tags `v<version>` and publishes the GitHub release.
 
 ## Checks before pushing
