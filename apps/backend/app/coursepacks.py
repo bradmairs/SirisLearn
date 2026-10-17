@@ -19,7 +19,10 @@ A pack module defines PACK:
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import importlib
+import random
 import logging
 import pkgutil
 from typing import Any
@@ -39,6 +42,28 @@ def mcq(prompt: str, options: list[str], answer: int, explanation: str, svg: str
 def open_q(prompt: str, model_answer: str, key_points: list[str], explanation: str, svg: str = "", alt: str = "") -> dict[str, Any]:
     return {"kind": "open", "prompt": prompt, "options": [], "answer_index": -1, "model_answer": model_answer,
             "key_points": key_points, "explanation": explanation, "svg": svg, "image_alt": alt}
+
+
+def balanced(lesson: dict[str, Any], seed: str) -> dict[str, Any]:
+    """Spread the right answers evenly over the option positions (the same
+    way every time), so it isn't always B."""
+    out = copy.deepcopy(lesson)
+    rng = random.Random(hashlib.sha256(f"{seed}:{lesson.get('title', '')}".encode()).hexdigest())
+    slots: list[int] = []
+    for q in out.get("questions") or []:
+        if q.get("kind") != "mcq":
+            continue
+        n = len(q["options"])
+        if not slots:
+            slots = list(range(n))
+            rng.shuffle(slots)
+        target = slots.pop() % n
+        right = q["options"][q["answer_index"]]
+        others = [o for i, o in enumerate(q["options"]) if i != q["answer_index"]]
+        rng.shuffle(others)
+        others.insert(target, right)
+        q["options"], q["answer_index"] = others, target
+    return out
 
 
 def available() -> list[dict[str, Any]]:
@@ -67,7 +92,7 @@ def install(store: Store, pack: dict[str, Any]) -> str:
         for lesson in section["lessons"]:
             rows.append({"id": new_id(), "course_id": course_id, "section_idx": s_idx, "position": position,
                          "title": lesson["title"], "summary": lesson["summary"], "status": "ready",
-                         "content": clean_lesson(lesson["lesson"], max_questions=None), "generated_at": now})
+                         "content": clean_lesson(balanced(lesson["lesson"], pack["id"]), max_questions=None), "generated_at": now})
             position += 1
     store.replace_lessons(course_id, rows)
     return course_id

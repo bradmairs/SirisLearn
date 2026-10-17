@@ -1,6 +1,6 @@
 # SirisLearn
 
-**Version 1.1** ([release notes](docs/releases/1.1.md))
+**Version 1.2** ([release notes](docs/releases/1.2.md))
 
 SirisLearn is a private learning app in the Siris family, something like
 LinkedIn Learning but built for one person. Give it any topic and it writes
@@ -79,6 +79,16 @@ Deleting a course keeps its history and awards.
 SirisLearn ships with hand-written courses, added to the library once (turn
 off with `SIRISLEARN_SEED_PACKS=false`): see `apps/backend/app/packs/`. They
 work without a model; with one, retakes still get fresh questions.
+
+| Topic | Beginner | Intermediate | Expert |
+| --- | --- | --- | --- |
+| Docker | Docker from scratch | Docker in practice | Docker at expert level |
+| Linux | Linux from scratch | Linux power user | Linux internals and administration |
+| Water and civil engineering | Water and civil engineering fundamentals | Water engineering design | Water engineering at expert level |
+
+Each has two sections of three lessons, with a diagram per lesson and ten
+questions per lesson (multiple choice and open, some on pictures). Packs are
+added once by id; editing a pack later doesn't change a copy already added.
 
 ## Deploy
 

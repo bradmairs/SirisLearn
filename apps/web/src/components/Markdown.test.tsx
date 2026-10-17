@@ -14,3 +14,12 @@ test("renders inline formatting without injecting HTML", () => {
   expect(screen.getByText("code").tagName).toBe("CODE");
   expect(document.querySelector("img")).toBeNull();
 });
+
+test("renders tables", () => {
+  const blocks = parse("| Need | Use |\n| --- | --- |\n| Data | **Volume** |\n| Config | Bind mount |\n\nAfter.");
+  expect(blocks[0]).toEqual({ type: "table", head: ["Need", "Use"], rows: [["Data", "**Volume**"], ["Config", "Bind mount"]] });
+  expect(blocks[1]).toEqual({ type: "p", text: "After." });
+  render(<Markdown text={"| A | B |\n|---|---|\n| 1 | 2 |"} />);
+  expect(screen.getByRole("table")).toBeInTheDocument();
+  expect(screen.getByRole("columnheader", { name: "A" })).toBeInTheDocument();
+});
