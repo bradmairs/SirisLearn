@@ -2,7 +2,7 @@ import { Fragment, type ReactNode } from "react";
 
 /**
  * A small Markdown renderer for lessons: headings, paragraphs, bulleted and
- * numbered lists, blockquotes, code blocks, **bold**, *italic* and `code`.
+ * numbered lists, blockquotes, tables, code blocks, **bold**, *italic* and `code`.
  * It builds React elements (never raw HTML), so lesson text can't inject markup.
  */
 export function Markdown({ text }: { text: string }) {
@@ -14,7 +14,12 @@ type Block =
   | { type: "p"; text: string }
   | { type: "quote"; text: string }
   | { type: "ul" | "ol"; items: string[] }
-  | { type: "code"; text: string };
+  | { type: "code"; text: string }
+  | { type: "table"; head: string[]; rows: string[][] };
+
+function cells(line: string): string[] {
+  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+}
 
 export function parse(text: string): Block[] {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
@@ -32,6 +37,14 @@ export function parse(text: string): Block[] {
       while (i < lines.length && !lines[i].trim().startsWith("```")) code.push(lines[i++]);
       i++;
       out.push({ type: "code", text: code.join("\n") });
+      continue;
+    }
+    if (line.trim().startsWith("|") && i + 1 < lines.length && /^\s*\|?\s*:?-{3,}/.test(lines[i + 1])) {
+      const head = cells(line);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) rows.push(cells(lines[i++]));
+      out.push({ type: "table", head, rows });
       continue;
     }
     const heading = /^(#{1,4})\s+(.*)$/.exec(line);
@@ -60,7 +73,7 @@ export function parse(text: string): Block[] {
       continue;
     }
     const para: string[] = [];
-    while (i < lines.length && lines[i].trim() && !/^(#{1,4}\s|\s*>|\s*[-*+]\s|\s*\d+[.)]\s|\s*```)/.test(lines[i])) para.push(lines[i++].trim());
+    while (i < lines.length && lines[i].trim() && !/^(#{1,4}\s|\s*>|\s*[-*+]\s|\s*\d+[.)]\s|\s*```|\s*\|)/.test(lines[i])) para.push(lines[i++].trim());
     out.push({ type: "p", text: para.join(" ") });
   }
   return out;
@@ -81,6 +94,15 @@ function blocks(text: string): ReactNode[] {
         return <ol key={key}>{b.items.map((item, i) => <li key={i}>{inline(item)}</li>)}</ol>;
       case "code":
         return <pre key={key}><code>{b.text}</code></pre>;
+      case "table":
+        return (
+          <div key={key} className="table-wrap">
+            <table>
+              <thead><tr>{b.head.map((h, i) => <th key={i}>{inline(h)}</th>)}</tr></thead>
+              <tbody>{b.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{inline(c)}</td>)}</tr>)}</tbody>
+            </table>
+          </div>
+        );
       default:
         return <p key={key}>{inline(b.text)}</p>;
     }
