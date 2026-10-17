@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowRight, Check, CircleCheck, CircleX, Flame, PartyPopper, RotateCcw, Sparkles, X, Zap } from "lucide-react";
+import { ArrowRight, Award, Brain, Check, CircleCheck, CircleX, Flame, HelpCircle, PartyPopper, RotateCcw, Snowflake, Sparkles, X, Zap } from "lucide-react";
 import { api, post } from "../api/client";
-import type { AnswerResult, LessonDetail, Question, QuizResult } from "../api/types";
+import type { AnswerResult, LessonDetail, Question, QuizKind, QuizResult, StartedQuiz } from "../api/types";
+import { AskSheet } from "../components/AskSheet";
 import { Diagram } from "../components/Diagram";
 import { Glass } from "../components/Glass";
 import { iconFor } from "../components/icons";
@@ -16,61 +17,71 @@ const VERDICT = {
   incorrect: { label: "Not quite", Icon: CircleX, tone: "critical" },
 } as const;
 
+/** A lesson's quiz: /lesson/:id/quiz */
 export function Quiz() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const [lesson, setLesson] = useState<LessonDetail | null>(null);
-  const [attemptId, setAttemptId] = useState<string | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
+  useEffect(() => {
+    api<LessonDetail>(`/api/lessons/${id}`).then(setLesson).catch(() => undefined);
+  }, [id]);
+  return <QuizRunner key={id} kind="lesson" startUrl={`/api/lessons/${id}/attempts`} exitTo={`/lesson/${id}`} lesson={lesson} />;
+}
+
+/** The daily review: /review */
+export function Review() {
+  return <QuizRunner kind="review" startUrl="/api/review" exitTo="/" />;
+}
+
+/** A course's final exam: /course/:id/exam */
+export function Exam() {
+  const { id } = useParams();
+  return <QuizRunner key={id} kind="exam" startUrl={`/api/courses/${id}/exam`} exitTo={`/course/${id}`} courseId={id} />;
+}
+
+export function QuizRunner({ kind, startUrl, exitTo, lesson, courseId }: {
+  kind: QuizKind; startUrl: string; exitTo: string; lesson?: LessonDetail | null; courseId?: string;
+}) {
+  const navigate = useNavigate();
+  const [started, setStarted] = useState<StartedQuiz | null>(null);
   const [index, setIndex] = useState(0);
   const [results, setResults] = useState<Record<string, AnswerResult>>({});
   const [finished, setFinished] = useState<QuizResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [round, setRound] = useState(0);
-  const started = useRef<string | null>(null);
+  const begun = useRef<string | null>(null);
 
   useEffect(() => {
-    const key = `${id}:${round}`;
-    if (started.current === key) return; // StrictMode runs effects twice; start one attempt
-    started.current = key;
+    const key = `${startUrl}:${round}`;
+    if (begun.current === key) return; // StrictMode runs effects twice; start one attempt
+    begun.current = key;
     setResults({});
     setIndex(0);
     setFinished(null);
-    void (async () => {
-      try {
-        const [l, attempt] = await Promise.all([
-          api<LessonDetail>(`/api/lessons/${id}`),
-          post<{ attempt_id: string; questions: Question[] }>(`/api/lessons/${id}/attempts`),
-        ]);
-        setLesson(l);
-        setAttemptId(attempt.attempt_id);
-        setQuestions(attempt.questions);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Couldn't start the quiz.");
-      }
-    })();
-  }, [id, round]);
+    setStarted(null);
+    post<StartedQuiz>(startUrl).then(setStarted).catch((err) => setError(err instanceof Error ? err.message : "Couldn't start."));
+  }, [startUrl, round]);
 
-  if (error) return <div className="stack"><div className="error-banner" role="alert">{error}</div><Link to={`/lesson/${id}`} className="back-link">Back to the lesson</Link></div>;
-  if (!lesson || !attemptId || !questions.length) return <Loading label="Starting the quiz" />;
-  if (finished) return <Results result={finished} lesson={lesson} results={results} questions={questions} onRetake={() => setRound((r) => r + 1)} />;
+  if (error) return <div className="stack quiz"><div className="error-banner" role="alert">{error}</div><Link to={exitTo} className="back-link">Go back</Link></div>;
+  if (!started || !started.questions.length) return <Loading label="Starting" />;
+  if (finished) return <Results result={finished} lesson={lesson} courseId={courseId} results={results} questions={started.questions} onRetake={() => setRound((r) => r + 1)} exitTo={exitTo} />;
 
+  const questions = started.questions;
   const question = questions[index];
   const result = results[question.id];
   const last = index === questions.length - 1;
 
   async function finish() {
     try {
-      setFinished(await post<QuizResult>(`/api/attempts/${attemptId}/finish`));
+      setFinished(await post<QuizResult>(`/api/attempts/${started!.attempt_id}/finish`));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't finish the quiz.");
+      setError(err instanceof Error ? err.message : "Couldn't finish.");
     }
   }
 
   return (
     <div className="quiz">
       <header className="quiz__top">
-        <button type="button" className="icon-link" onClick={() => navigate(`/lesson/${id}`)} aria-label="Leave the quiz"><X size={20} aria-hidden="true" /></button>
+        <button type="button" className="icon-link" onClick={() => navigate(exitTo)} aria-label="Leave"><X size={20} aria-hidden="true" /></button>
         <ol className="quiz__dots" aria-label={`Question ${index + 1} of ${questions.length}`}>
           {questions.map((q, i) => {
             const r = results[q.id];
@@ -79,20 +90,28 @@ export function Quiz() {
         </ol>
         <span className="quiz__count">{index + 1}/{questions.length}</span>
       </header>
-      <QuestionCard key={question.id} question={question} attemptId={attemptId} result={result}
+      {index === 0 && !result && (
+        <p className="quiz__intro muted">
+          {kind === "review" ? "Daily review: questions you've answered before, back at growing intervals." :
+            kind === "exam" ? "Final exam: questions from every lesson. Score 80% to earn the certificate." :
+              started.fresh === false ? "Some of these you've seen before (options shuffled). New questions are on their way for next time." : null}
+        </p>
+      )}
+      <QuestionCard key={question.id} kind={kind} question={question} attemptId={started.attempt_id} result={result}
         onResult={(r) => setResults((all) => ({ ...all, [question.id]: r }))}
         onNext={() => (last ? finish() : setIndex(index + 1))} last={last} />
     </div>
   );
 }
 
-function QuestionCard({ question, attemptId, result, onResult, onNext, last }: {
-  question: Question; attemptId: string; result?: AnswerResult; onResult: (r: AnswerResult) => void; onNext: () => void; last: boolean;
+function QuestionCard({ kind, question, attemptId, result, onResult, onNext, last }: {
+  kind: QuizKind; question: Question; attemptId: string; result?: AnswerResult; onResult: (r: AnswerResult) => void; onNext: () => void; last: boolean;
 }) {
   const [choice, setChoice] = useState<number | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [asking, setAsking] = useState(false);
   const nextRef = useRef<HTMLButtonElement>(null);
   const ready = question.kind === "mcq" ? choice !== null : text.trim().length > 0;
 
@@ -117,6 +136,7 @@ function QuestionCard({ question, attemptId, result, onResult, onNext, last }: {
   useEffect(() => {
     if (question.kind !== "mcq" || result) return;
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === "TEXTAREA") return;
       const n = "1234".indexOf(e.key);
       if (n >= 0 && n < (question.options?.length ?? 0)) setChoice(n);
     };
@@ -125,9 +145,15 @@ function QuestionCard({ question, attemptId, result, onResult, onNext, last }: {
   }, [question, result]);
 
   const verdict = result ? VERDICT[result.verdict] : null;
+  const askPrompt = result && question.kind === "mcq"
+    ? `I answered "${question.options![result.choice!]}" to "${question.prompt}", but the answer is "${question.options![result.answer_index!]}". Can you help me understand why?`
+    : result ? `For "${question.prompt}" I wrote: "${result.text}". What did I miss?` : "";
   return (
     <Glass as="form" className="question" onSubmit={submit}>
-      <span className="question__kind">{question.kind === "mcq" ? "Multiple choice" : "Written answer"}{question.svg ? " · picture" : ""}</span>
+      <span className="question__kind">
+        {question.kind === "mcq" ? "Multiple choice" : "Written answer"}{question.svg ? " · picture" : ""}
+        {kind !== "lesson" && question.lesson_title ? <span className="question__from"> · {question.lesson_title}</span> : null}
+      </span>
       {question.svg && <Diagram svg={question.svg} alt={question.image_alt || "Picture for this question"} />}
       <h2 className="question__prompt">{question.prompt}</h2>
 
@@ -161,6 +187,10 @@ function QuestionCard({ question, attemptId, result, onResult, onNext, last }: {
             <p className="feedback__model"><strong>A strong answer:</strong> {result.model_answer}</p>
           )}
           {result.explanation && <p className="muted">{result.explanation}</p>}
+          {result.review && <p className="feedback__next muted">{result.verdict === "correct" ? `Back for review in ${days(result.review.due)}.` : "This one comes back in tomorrow's review."}</p>}
+          {result.verdict !== "correct" && (
+            <button type="button" className="chip chip--button feedback__help" onClick={() => setAsking(true)}><HelpCircle size={14} aria-hidden="true" /> Help me understand</button>
+          )}
         </div>
       )}
 
@@ -175,16 +205,29 @@ function QuestionCard({ question, attemptId, result, onResult, onNext, last }: {
           </Glass>
         )}
       </div>
+      {asking && result && <AskSheet lessonId={result.lesson_id} lessonTitle={result.lesson_title} initial={askPrompt} onClose={() => setAsking(false)} />}
     </Glass>
   );
 }
 
-function Results({ result, lesson, results, questions, onRetake }: {
-  result: QuizResult; lesson: LessonDetail; results: Record<string, AnswerResult>; questions: Question[]; onRetake: () => void;
+function days(due: string): string {
+  const n = Math.round((new Date(`${due}T00:00:00`).getTime() - new Date(new Date().toDateString()).getTime()) / 86400000);
+  return n <= 1 ? "a day" : `${n} days`;
+}
+
+function Results({ result, lesson, courseId, results, questions, onRetake, exitTo }: {
+  result: QuizResult; lesson?: LessonDetail | null; courseId?: string; results: Record<string, AnswerResult>; questions: Question[];
+  onRetake: () => void; exitTo: string;
 }) {
   const [review, setReview] = useState(false);
   const pct = Math.round(result.score * 100);
   const answeredXp = Object.values(results).reduce((n, r) => n + r.xp, 0);
+  const title = result.kind === "review" ? "Review done" :
+    result.kind === "exam" ? (result.passed ? "Exam passed!" : "Not this time") :
+      result.course_completed ? "Course complete!" : result.score === 1 ? "Perfect score!" : result.passed ? "Lesson passed" : "Keep going";
+  const subtitle = result.kind === "review" ? "Cards you got right come back later; the rest come back tomorrow." :
+    result.kind === "exam" ? (result.passed ? "You've earned the certificate for this course." : "You need 80% to pass. Review the lessons and try again.") :
+      result.passed ? lesson?.title ?? "" : "You need 70% to pass. Re-read the lesson and try again.";
   return (
     <div className="results">
       <Glass variant="strong" shape="xl" className="results__card">
@@ -192,19 +235,25 @@ function Results({ result, lesson, results, questions, onRetake }: {
           <span className="ring__big ring__big--xl">{pct}%</span>
           <span className="ring__small">{fmt(result.correct)}/{result.total}</span>
         </Ring>
-        <h1 className="results__title">{result.course_completed ? "Course complete!" : result.score === 1 ? "Perfect score!" : result.passed ? "Lesson passed" : "Keep going"}</h1>
-        <p className="muted">{result.passed ? lesson.title : `You need 70% to pass. Re-read the lesson and try again.`}</p>
+        <h1 className="results__title">{title}</h1>
+        <p className="muted">{subtitle}</p>
 
         <ul className="xp-list">
-          <li><Zap aria-hidden="true" /> Answers <b>+{answeredXp} XP</b></li>
+          {answeredXp > 0 && <li><Zap aria-hidden="true" /> Answers <b>+{answeredXp} XP</b></li>}
           {result.bonus.map((b) => <li key={b.label}><Sparkles aria-hidden="true" /> {b.label} <b>+{b.xp} XP</b></li>)}
+          {result.xp === 0 && <li><Zap aria-hidden="true" /> No XP this time</li>}
         </ul>
 
         <div className="results__badges">
           <span className={`chip ${result.streak.today_done ? "chip--flame" : ""}`}><Flame size={14} aria-hidden="true" /> {result.streak.current} day streak</span>
+          {result.streak.freezes > 0 && <span className="chip chip--ice"><Snowflake size={14} aria-hidden="true" /> {result.streak.freezes} freeze{result.streak.freezes > 1 ? "s" : ""}</span>}
           <span className="chip">{result.goal.today}/{result.goal.goal} XP today{result.goal.met_now ? " · goal met!" : ""}</span>
           <span className="chip">Level {result.level.level}{result.level_up ? " · level up!" : ""}</span>
+          {result.brain && <span className="chip chip--brain"><Brain size={14} aria-hidden="true" /> Saving to your Second Brain</span>}
         </div>
+        {result.kind === "lesson" && !result.passed && !result.streak.today_done && result.streak.current > 0 && (
+          <p className="muted">A failed quiz doesn't keep your streak. Pass a quiz or do your daily review today.</p>
+        )}
 
         {result.achievements.length > 0 && (
           <div className="unlocked">
@@ -217,11 +266,16 @@ function Results({ result, lesson, results, questions, onRetake }: {
         )}
 
         <div className="results__actions">
-          {lesson.next_id && result.passed && (
+          {result.kind === "lesson" && lesson?.next_id && result.passed && (
             <Glass as={Link} to={`/lesson/${lesson.next_id}`} variant="tint" shape="pill" interactive className="button">Next lesson <ArrowRight aria-hidden="true" /></Glass>
           )}
-          <Glass as="button" type="button" shape="pill" interactive className="button" onClick={onRetake}><RotateCcw aria-hidden="true" /> Retake</Glass>
-          <Glass as={Link} to={`/course/${lesson.course.id}`} shape="pill" interactive className="button">Course</Glass>
+          {result.kind === "exam" && result.certificate && courseId && (
+            <Glass as={Link} to={`/certificate/${courseId}`} variant="tint" shape="pill" interactive className="button"><Award aria-hidden="true" /> Certificate</Glass>
+          )}
+          {result.kind !== "review" && <Glass as="button" type="button" shape="pill" interactive className="button" onClick={onRetake}><RotateCcw aria-hidden="true" /> {result.kind === "exam" ? "Try again" : "Retake"}</Glass>}
+          <Glass as={Link} to={result.kind === "lesson" && lesson ? `/course/${lesson.course.id}` : exitTo} shape="pill" interactive className="button">
+            {result.kind === "review" ? "Done" : "Course"}
+          </Glass>
         </div>
       </Glass>
 

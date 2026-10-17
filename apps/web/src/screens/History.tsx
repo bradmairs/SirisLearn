@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Award, BookOpen, CircleCheck, Flag, GraduationCap, ListChecks, Sparkles, Target } from "lucide-react";
+import { Award, BadgeCheck, BookOpen, Brain, CircleCheck, Flag, GraduationCap, ListChecks, Repeat, Sparkles, Target } from "lucide-react";
 import { api } from "../api/client";
 import { useApi } from "../api/useApi";
 import type { History as HistoryData, HistoryEvent } from "../api/types";
@@ -17,6 +17,9 @@ const EVENTS: Record<HistoryEvent["kind"], { Icon: typeof Award; text: (e: Histo
   course_completed: { Icon: GraduationCap, text: (e) => `Finished the course ${e.title}` },
   goal_met: { Icon: Target, text: (e) => `Hit your ${e.title.charAt(0).toLowerCase()}${e.title.slice(1)}` },
   achievement: { Icon: Award, text: (e) => `Unlocked ${e.title}` },
+  review_finished: { Icon: Repeat, text: (e) => `${e.title} · ${score(e)}` },
+  exam_finished: { Icon: BadgeCheck, text: (e) => `${e.title} · ${score(e)}${(e.detail as { passed?: boolean }).passed ? " · passed" : ""}` },
+  brain_saved: { Icon: Brain, text: (e) => `Saved ${e.title} to your Second Brain` },
 };
 
 function score(e: HistoryEvent): string {
@@ -46,6 +49,7 @@ export function History() {
   if (!data) return <Loading />;
   const s = data.stats;
   const days = groupByDay(events);
+  const formatDay = (day: string) => dayLabel(day, data.today);
 
   return (
     <>
@@ -66,7 +70,7 @@ export function History() {
 
       <h2 className="section-title">Last six months</h2>
       <Glass className="heatmap-card">
-        <Heatmap cells={data.heatmap} goal={data.goal} />
+        <Heatmap cells={data.heatmap} goal={data.goal} frozen={data.streak.frozen_days} />
       </Glass>
 
       <h2 className="section-title">Timeline</h2>
@@ -106,7 +110,7 @@ function Stat({ value, label }: { value: string | number; label: string }) {
 }
 
 /** Weeks as columns, Monday at the top; colour by XP against the daily goal. */
-export function Heatmap({ cells, goal }: { cells: { day: string; xp: number }[]; goal: number }) {
+export function Heatmap({ cells, goal, frozen = [] }: { cells: { day: string; xp: number }[]; goal: number; frozen?: string[] }) {
   if (!cells.length) return null;
   const first = new Date(`${cells[0].day}T00:00:00`);
   const pad = (first.getDay() + 6) % 7;
@@ -118,10 +122,13 @@ export function Heatmap({ cells, goal }: { cells: { day: string; xp: number }[];
     <div className="heatmap" role="img" aria-label={`Daily XP for the last ${cells.length} days`}>
       {weeks.map((week, w) => (
         <div key={w} className="heatmap__week">
-          {week.map((cell, d) => cell ? <span key={d} className={`heatmap__cell heat-${level(cell.xp)}`} title={`${formatDay(cell.day)}: ${cell.xp} XP`} /> : <span key={d} className="heatmap__cell heatmap__cell--pad" />)}
+          {week.map((cell, d) => cell ? (
+            <span key={d} className={`heatmap__cell heat-${level(cell.xp)} ${frozen.includes(cell.day) ? "heatmap__cell--frozen" : ""}`}
+              title={`${cell.day}: ${cell.xp} XP${frozen.includes(cell.day) ? " (streak freeze)" : ""}`} />
+          ) : <span key={d} className="heatmap__cell heatmap__cell--pad" />)}
         </div>
       ))}
-      <div className="heatmap__legend muted">Less <span className="heatmap__cell heat-0" /><span className="heatmap__cell heat-1" /><span className="heatmap__cell heat-2" /><span className="heatmap__cell heat-3" /><span className="heatmap__cell heat-4" /> More</div>
+      <div className="heatmap__legend muted">Less <span className="heatmap__cell heat-0" /><span className="heatmap__cell heat-1" /><span className="heatmap__cell heat-2" /><span className="heatmap__cell heat-3" /><span className="heatmap__cell heat-4" /> More{frozen.length > 0 && <> · <span className="heatmap__cell heatmap__cell--frozen" /> Freeze</>}</div>
     </div>
   );
 }
@@ -132,13 +139,14 @@ function groupByDay(events: HistoryEvent[]): [string, HistoryEvent[]][] {
   return [...out.entries()];
 }
 
-function formatDay(day: string): string {
+/** "Today", "Yesterday" or a date, counted from the server's day (the
+ * app's time zone), not the browser's. */
+export function dayLabel(day: string, today: string): string {
   const date = new Date(`${day}T00:00:00`);
-  const today = new Date();
-  const diff = Math.round((new Date(today.toDateString()).getTime() - date.getTime()) / 86400000);
+  const diff = Math.round((new Date(`${today}T00:00:00`).getTime() - date.getTime()) / 86400000);
   if (diff === 0) return "Today";
   if (diff === 1) return "Yesterday";
-  return date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: date.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+  return date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: day.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric" });
 }
 
 function time(ts: string): string {

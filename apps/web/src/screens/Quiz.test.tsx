@@ -1,13 +1,14 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { Quiz } from "./Quiz";
+import { Quiz, Review } from "./Quiz";
 
 const lesson = { id: "l1", title: "Moving heat", course: { id: "c1", title: "Heat pumps", icon: "zap" }, next_id: "l2", status: "ready" };
-const questions = [
-  { id: "q1", kind: "mcq", prompt: "Which way does heat flow?", svg: "", image_alt: "", options: ["Hot to cold", "Cold to hot", "Neither", "Both"] },
-  { id: "q2", kind: "open", prompt: "Explain a heat pump.", svg: "<svg xmlns='http://www.w3.org/2000/svg'/>", image_alt: "A diagram" },
+const questionsBase = [
+  { id: "l1:q1", kind: "mcq", prompt: "Which way does heat flow?", svg: "", image_alt: "", options: ["Hot to cold", "Cold to hot", "Neither", "Both"] },
+  { id: "l1:q2", kind: "open", prompt: "Explain a heat pump.", svg: "<svg xmlns='http://www.w3.org/2000/svg'/>", image_alt: "A diagram" },
 ];
+const questions = questionsBase.map((q) => ({ ...q, lesson_title: "Moving heat" }));
 
 function mockApi() {
   const calls: { url: string; body?: unknown }[] = [];
@@ -16,14 +17,17 @@ function mockApi() {
     calls.push({ url, body });
     const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { "Content-Type": "application/json" } });
     if (url === "/api/lessons/l1") return json(lesson);
-    if (url === "/api/lessons/l1/attempts") return json({ attempt_id: "a1", questions });
-    if (url === "/api/attempts/a1/answer" && body.question_id === "q1")
-      return json({ verdict: "correct", score: 1, xp: 10, kind: "mcq", explanation: "Heat flows downhill.", feedback: "", choice: 0, answer_index: 0 });
+    if (url === "/api/lessons/l1/attempts") return json({ attempt_id: "a1", kind: "lesson", fresh: true, questions });
+    if (url === "/api/review") return json({ attempt_id: "a1", kind: "review", questions });
+    if (url === "/api/attempts/a1/answer" && body.question_id === "l1:q1")
+      return json({ verdict: "correct", score: 1, xp: 10, kind: "mcq", explanation: "Heat flows downhill.", feedback: "", choice: 0, answer_index: 0,
+        lesson_id: "l1", lesson_title: "Moving heat", review: { box: 1, due: "2099-01-04" } });
     if (url === "/api/attempts/a1/answer")
-      return json({ verdict: "partial", score: 0.5, xp: 7, kind: "open", explanation: "", feedback: "Mention the refrigerant.", model_answer: "It moves heat using a refrigerant.", text: body.text });
+      return json({ verdict: "partial", score: 0.5, xp: 7, kind: "open", explanation: "", feedback: "Mention the refrigerant.", model_answer: "It moves heat using a refrigerant.", text: body.text,
+        lesson_id: "l1", lesson_title: "Moving heat" });
     if (url === "/api/attempts/a1/finish")
-      return json({ attempt_id: "a1", correct: 1.5, total: 2, score: 0.75, passed: true, first_pass: true, xp: 37, bonus: [{ label: "Lesson passed", xp: 20 }],
-        streak: { current: 3, best: 3, today_done: true, at_risk: false }, goal: { goal: 50, today: 37, met_now: false },
+      return json({ attempt_id: "a1", kind: "lesson", correct: 1.5, total: 2, score: 0.75, passed: true, first_pass: true, xp: 37, bonus: [{ label: "Lesson passed", xp: 20 }],
+        streak: { current: 3, best: 3, today_done: true, at_risk: false, freezes: 0, frozen_days: [], freeze_in_use: false }, goal: { goal: 50, today: 37, met_now: false },
         level: { level: 1, xp_into: 37, xp_for_next: 100, progress: 0.37 }, level_up: false,
         achievements: [{ id: "first-steps", title: "First steps", description: "Finish your first quiz.", icon: "footprints", tier: "bronze", target: 1, value: 1, unlocked_at: "x" }],
         course_completed: false });
@@ -53,6 +57,7 @@ test("answers each question, shows feedback, then the results", async () => {
   await user.type(screen.getByLabelText("Your answer"), "It moves heat");
   await user.click(screen.getByRole("button", { name: "Check answer" }));
   expect(await screen.findByText("Partly right")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Help me understand/ })).toBeInTheDocument();
   expect(screen.getByText(/It moves heat using a refrigerant/)).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /See results/ }));
 
@@ -61,4 +66,15 @@ test("answers each question, shows feedback, then the results", async () => {
   expect(screen.getByText("First steps")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Next lesson/ })).toHaveAttribute("href", "/lesson/l2");
   await waitFor(() => expect(calls.filter((c) => c.url === "/api/lessons/l1/attempts")).toHaveLength(1));
+});
+
+test("the daily review shows which lesson each question is from", async () => {
+  mockApi();
+  render(
+    <MemoryRouter initialEntries={["/review"]}>
+      <Routes><Route path="/review" element={<Review />} /></Routes>
+    </MemoryRouter>,
+  );
+  expect(await screen.findByText(/Daily review: questions you've answered before/)).toBeInTheDocument();
+  expect(screen.getByText(/· Moving heat/)).toBeInTheDocument();
 });

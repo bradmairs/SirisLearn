@@ -32,12 +32,12 @@ def test_hub_status_summary_search(client):
 
 def test_hub_reports_streak_at_risk(client):
     store = get_store()
-    store.insert("events", {"ts": "2020-01-01T00:00:00+00:00", "day": "2000-01-01", "kind": "quiz_finished", "xp": 10})
+    store.insert("events", {"ts": "2020-01-01T00:00:00+00:00", "day": "2000-01-01", "kind": "quiz_finished", "xp": 10, "detail": {"passed": True}})
     from datetime import date, timedelta
 
     from app.db import local_day
 
     yesterday = (date.fromisoformat(local_day()) - timedelta(days=1)).isoformat()
-    store.insert("events", {"ts": f"{yesterday}T05:00:00+00:00", "day": yesterday, "kind": "quiz_finished", "xp": 10})
+    store.insert("events", {"ts": f"{yesterday}T05:00:00+00:00", "day": yesterday, "kind": "quiz_finished", "xp": 10, "detail": {"passed": True}})
     streak = client.get("/api/hub/v1/summary", headers={"X-API-Key": "hub-key"}).json()["streak"]
     assert streak["current"] == 1 and streak["at_risk"]

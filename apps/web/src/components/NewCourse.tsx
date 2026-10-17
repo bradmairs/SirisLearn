@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronDown, Sparkles } from "lucide-react";
-import { post } from "../api/client";
+import { Brain, ChevronDown, Sparkles } from "lucide-react";
+import { api, post } from "../api/client";
 import type { CourseCard, Length, Level } from "../api/types";
 import { Glass } from "./Glass";
 
@@ -15,7 +15,7 @@ const LENGTHS: { id: Length; label: string; hint: string }[] = [
   { id: "standard", label: "Standard", hint: "about 14 lessons" },
   { id: "deep", label: "Deep dive", hint: "about 24 lessons" },
 ];
-const IDEAS = ["How black holes form", "Personal finance basics", "Stoic philosophy", "Machine learning fundamentals", "Wine tasting", "Structural engineering for bridges"];
+const PLACEHOLDERS = ["How black holes form", "Personal finance basics", "Stoic philosophy", "Machine learning fundamentals"];
 
 /** "What do you want to learn?" A topic, a level and a size become a course. */
 export function NewCourse({ compact = false }: { compact?: boolean }) {
@@ -27,6 +27,10 @@ export function NewCourse({ compact = false }: { compact?: boolean }) {
   const [more, setMore] = useState(!compact);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ideas, setIdeas] = useState<{ source: string; ideas: string[] } | null>(null);
+  useEffect(() => {
+    api<{ source: string; ideas: string[] }>("/api/suggestions").then(setIdeas).catch(() => undefined);
+  }, []);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -47,12 +51,20 @@ export function NewCourse({ compact = false }: { compact?: boolean }) {
       <label className="new-course__label" htmlFor="topic">What do you want to learn?</label>
       <div className="new-course__row">
         <Sparkles className="new-course__spark" aria-hidden="true" />
-        <input id="topic" className="new-course__input" placeholder={IDEAS[new Date().getDate() % IDEAS.length]} value={topic}
+        <input id="topic" className="new-course__input" placeholder={PLACEHOLDERS[new Date().getDate() % PLACEHOLDERS.length]} value={topic}
           onChange={(e) => setTopic(e.target.value)} onFocus={() => setMore(true)} maxLength={300} autoComplete="off" />
         <Glass as="button" type="submit" variant="tint" shape="pill" interactive className="button button--small" disabled={busy || topic.trim().length < 2}>
           {busy ? "Starting…" : "Create"}
         </Glass>
       </div>
+      {ideas && ideas.ideas.length > 0 && !topic && (
+        <div className="chip-row new-course__ideas" aria-label="Ideas">
+          {ideas.source === "brain" && <span className="new-course__from"><Brain size={13} aria-hidden="true" /> From your Second Brain</span>}
+          {ideas.ideas.map((idea) => (
+            <button key={idea} type="button" className="chip chip--button" onClick={() => { setTopic(idea); setMore(true); }}>{idea}</button>
+          ))}
+        </div>
+      )}
       {more && (
         <div className="new-course__options">
           <div className="chip-row" role="radiogroup" aria-label="Level">

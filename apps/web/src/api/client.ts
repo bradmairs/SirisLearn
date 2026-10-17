@@ -29,6 +29,8 @@ export const session = {
   clear() {
     storage()?.removeItem(TOKEN_KEY);
     storage()?.removeItem(USER_KEY);
+    // Forget cached lessons and progress on this device.
+    if (typeof navigator !== "undefined" && navigator.serviceWorker?.controller) navigator.serviceWorker.controller.postMessage("sign-out");
   },
 };
 

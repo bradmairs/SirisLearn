@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Award, CircleCheck, Flame, Zap } from "lucide-react";
+import { ArrowRight, Award, CircleCheck, Flame, Repeat, Snowflake, Zap } from "lucide-react";
 import { useApi } from "../api/useApi";
 import type { CourseCard, Summary } from "../api/types";
 import { Glass } from "../components/Glass";
@@ -50,6 +50,8 @@ export function Today({ user }: { user: string }) {
               </div>
             </Glass>
           </div>
+
+          <ReviewCard review={s.review} />
 
           {s.continue && (
             <Glass as={Link} to={`/lesson/${s.continue.lesson_id}`} interactive className="continue">
@@ -102,6 +104,31 @@ export function Today({ user }: { user: string }) {
   );
 }
 
+function ReviewCard({ review }: { review: Summary["review"] }) {
+  if (!review.cards) return null;
+  if (!review.due) {
+    return (
+      <Glass className="review-card review-card--done">
+        <span className="review-card__icon" aria-hidden="true"><Repeat /></span>
+        <div>
+          <p className="stat-card__title">Review: all caught up</p>
+          <p className="muted">{review.cards} cards in rotation{review.next_due ? ` · next due ${new Date(`${review.next_due}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}` : ""}</p>
+        </div>
+      </Glass>
+    );
+  }
+  return (
+    <Glass as={Link} to="/review" interactive className="review-card">
+      <span className="review-card__icon" aria-hidden="true"><Repeat /></span>
+      <div style={{ flex: 1 }}>
+        <p className="stat-card__title">Daily review · {review.due} card{review.due === 1 ? "" : "s"} due</p>
+        <p className="muted">A few minutes on questions from earlier lessons. Counts for your streak.</p>
+      </div>
+      <ArrowRight className="continue__go" aria-hidden="true" />
+    </Glass>
+  );
+}
+
 export function StreakCard({ streak }: { streak: Summary["streak"] }) {
   const lit = streak.current > 0;
   return (
@@ -111,10 +138,14 @@ export function StreakCard({ streak }: { streak: Summary["streak"] }) {
         <p className="stat-card__title"><span className="streak__count">{streak.current}</span> day streak</p>
         <p className="muted">
           {streak.today_done ? <><CircleCheck size={14} className="tone-good" aria-hidden="true" /> Done for today</> :
-            streak.at_risk ? "Finish a quiz today to keep it going" :
-              "Finish a quiz to start a streak"}
+            streak.at_risk ? "Pass a quiz or do your review today to keep it" :
+              "Pass a quiz to start a streak"}
         </p>
-        {streak.best > 0 && <p className="muted">Best: {streak.best} day{streak.best === 1 ? "" : "s"}</p>}
+        {streak.freeze_in_use && <p className="muted tone-ice"><Snowflake size={13} aria-hidden="true" /> A freeze covered yesterday</p>}
+        <p className="muted">
+          {streak.best > 0 && <>Best: {streak.best} day{streak.best === 1 ? "" : "s"}</>}
+          {streak.freezes > 0 && <span className="tone-ice"> · <Snowflake size={13} aria-hidden="true" /> {streak.freezes} freeze{streak.freezes > 1 ? "s" : ""}</span>}
+        </p>
       </div>
     </Glass>
   );
