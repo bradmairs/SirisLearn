@@ -19,15 +19,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
-from app import config, prompts, svg
+from app import config, photos, prompts, svg
 from app.db import Store, get_store, new_id, now_iso
 from app.llm import LLMError, get_llm
 
 logger = logging.getLogger(__name__)
 
 MIN_QUESTIONS = 6
+MAX_POOL = 60
 _tasks: dict[str, asyncio.Task] = {}
 _semaphore: tuple[asyncio.AbstractEventLoop, asyncio.Semaphore] | None = None
 
@@ -46,6 +48,11 @@ def _spawn(key: str, coro_fn) -> None:
         return
     _tasks[key] = asyncio.create_task(coro_fn())
     _tasks[key].add_done_callback(lambda _t, key=key: _tasks.pop(key, None))
+
+
+def background(key: str, coro_fn) -> None:
+    """Run one-off background work (at most one per key at a time)."""
+    _spawn(key, coro_fn)
 
 
 async def drain() -> None:
@@ -95,6 +102,7 @@ async def _plan(course_id: str) -> None:
                 system=prompts.PLANNER_SYSTEM, context="",
                 prompt=prompts.outline_prompt(course["topic"], course["level"], course["length"], course["notes"]),
                 schema=prompts.OUTLINE_SCHEMA, effort="medium", max_tokens=16000,
+                meta={"purpose": "plan", "course_id": course_id},
             )
         sections = clean_outline(plan)
     except LLMError as exc:
@@ -109,6 +117,7 @@ async def _plan(course_id: str) -> None:
     store.update("courses", course_id, title=plan["title"].strip()[:120] or course["topic"],
                  summary=plan["summary"].strip(), icon=plan["icon"] if plan["icon"] in prompts.ICONS else "book",
                  sections=[{"title": s["title"], "summary": s["summary"]} for s in sections],
+                 area=plan.get("area") if plan.get("area") in prompts.AREAS else "other", tags=clean_tags(plan.get("tags")),
                  status="ready", error="", updated_at=now_iso())
     rows, position = [], 0
     for s_idx, section in enumerate(sections):
@@ -124,6 +133,15 @@ async def _plan(course_id: str) -> None:
             ensure_lesson(row["id"])
     elif rows:
         ensure_lesson(rows[0]["id"])
+
+
+def clean_tags(tags: Any) -> list[str]:
+    out: list[str] = []
+    for tag in tags or []:
+        tag = re.sub(r"[^a-z0-9+#. -]", "", str(tag).lower()).strip().replace(" ", "-")[:32]
+        if tag and tag not in out:
+            out.append(tag)
+    return out[:8]
 
 
 def clean_outline(plan: dict[str, Any]) -> list[dict[str, Any]]:
@@ -197,8 +215,11 @@ async def _write(lesson_id: str) -> None:
                 context=prompts.course_context(course, sections),
                 prompt=prompts.lesson_prompt(lesson["section_idx"] + 1, lesson_number, section["title"], lesson["title"], lesson["summary"]),
                 schema=prompts.LESSON_SCHEMA, effort=config.env("SIRISLEARN_EFFORT", "medium"), max_tokens=64000,
+                meta={"purpose": "lesson", "course_id": course["id"], "lesson_id": lesson_id},
             )
         content = clean_lesson(raw)
+        if content.get("photo_query"):
+            content["photo"] = await photos.find(content["photo_query"])
     except LLMError as exc:
         store.update("lessons", lesson_id, status="error", error=str(exc))
         return
@@ -218,26 +239,87 @@ def _plan_with_lessons(store: Store, course: dict[str, Any]) -> list[dict[str, A
     return sections
 
 
-def clean_lesson(raw: dict[str, Any]) -> dict[str, Any]:
-    questions = []
-    for q in raw.get("questions") or []:
-        cleaned = clean_question(q)
-        if cleaned:
-            cleaned["id"] = f"q{len(questions) + 1}"
-            questions.append(cleaned)
-    questions = questions[: prompts.QUESTIONS_PER_LESSON]
+def clean_lesson(raw: dict[str, Any], max_questions: int | None = prompts.QUESTIONS_PER_LESSON) -> dict[str, Any]:
+    """Check and tidy a written lesson. Course packs pass max_questions=None
+    to keep a bigger question pool."""
+    questions = clean_questions(raw.get("questions") or [], 1)[:max_questions]
     body = str(raw.get("body") or "").strip()
     if len(body) < 200 or len(questions) < MIN_QUESTIONS:
         raise LLMError("The lesson came back incomplete. Retry to write it again.")
     figure = svg.sanitize(raw.get("figure_svg"))
-    return {
+    out = {
         "body": body,
         "minutes": max(2, min(30, int(raw.get("minutes") or 8))),
         "key_points": [str(p).strip() for p in raw.get("key_points") or [] if str(p).strip()][:6],
         "figure_svg": figure,
         "figure_caption": str(raw.get("figure_caption") or "").strip() if figure else "",
         "questions": questions,
+        "photo_query": str(raw.get("photo_query") or "").strip()[:80],
     }
+    return out
+
+
+def clean_questions(raw: list[Any], start: int) -> list[dict[str, Any]]:
+    """Clean a batch of questions and number them from q<start>."""
+    out = []
+    for q in raw or []:
+        cleaned = clean_question(q)
+        if cleaned:
+            cleaned["id"] = f"q{start + len(out)}"
+            out.append(cleaned)
+    return out
+
+
+# -- fresh questions and photos -------------------------------------------------
+
+
+def extend_questions(lesson_id: str) -> None:
+    """Write 10 new questions for a lesson in the background, so the next
+    retake has questions you haven't seen. Does nothing without a model."""
+    if get_llm() is None or f"questions:{lesson_id}" in _tasks:
+        return
+    _spawn(f"questions:{lesson_id}", lambda: _extend(lesson_id))
+
+
+async def _extend(lesson_id: str) -> None:
+    store = get_store()
+    lesson = store.lesson(lesson_id)
+    llm = get_llm()
+    if lesson is None or lesson["status"] != "ready" or llm is None:
+        return
+    if len(lesson["content"]["questions"]) >= MAX_POOL:
+        return
+    try:
+        async with _limit():
+            raw = await llm.json(system=prompts.QUESTION_WRITER_SYSTEM, context="", prompt=prompts.questions_prompt(lesson),
+                                 schema=prompts.QUESTIONS_SCHEMA, effort=config.env("SIRISLEARN_EFFORT", "medium"), max_tokens=32000,
+                                 meta={"purpose": "questions", "course_id": lesson["course_id"], "lesson_id": lesson_id})
+    except LLMError:
+        logger.warning("Writing fresh questions for %s failed", lesson_id, exc_info=True)
+        return
+    current = store.lesson(lesson_id)
+    if current is None or current["status"] != "ready":
+        return
+    pool = current["content"]["questions"]
+    numbers = [int(q["id"][1:]) for q in pool if q["id"][1:].isdigit()]
+    fresh = clean_questions(raw.get("questions") or [], max(numbers, default=0) + 1)
+    if fresh:
+        store.update("lessons", lesson_id, content={**current["content"], "questions": pool + fresh})
+
+
+def ensure_photo(lesson: dict[str, Any]) -> None:
+    """Find a lesson's photo once (lessons from a course pack, or written
+    before photos existed)."""
+    content = lesson.get("content") or {}
+    if content.get("photo_query") and "photo" not in content and photos.enabled():
+        _spawn(f"photo:{lesson['id']}", lambda: _photo(lesson["id"]))
+
+
+async def _photo(lesson_id: str) -> None:
+    found = await photos.find((get_store().lesson(lesson_id) or {}).get("content", {}).get("photo_query", ""))
+    current = get_store().lesson(lesson_id)
+    if current and current["content"] is not None:
+        get_store().update("lessons", lesson_id, content={**current["content"], "photo": found})
 
 
 def clean_question(q: dict[str, Any]) -> dict[str, Any] | None:

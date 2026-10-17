@@ -86,9 +86,51 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS reviews (
+    key TEXT PRIMARY KEY,
+    lesson_id TEXT NOT NULL,
+    course_id TEXT NOT NULL,
+    qid TEXT NOT NULL,
+    box INTEGER NOT NULL DEFAULT 0,
+    due TEXT NOT NULL,
+    seen INTEGER NOT NULL DEFAULT 0,
+    lapses INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS reviews_due ON reviews(due);
+CREATE TABLE IF NOT EXISTS usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    purpose TEXT NOT NULL,
+    model TEXT NOT NULL,
+    course_id TEXT,
+    lesson_id TEXT,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    cost REAL NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    endpoint TEXT PRIMARY KEY,
+    subscription TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
-JSON_FIELDS = {"sections", "content", "answers", "detail"}
+# Columns added after 1.0: (table, column, definition). Added on startup when missing.
+MIGRATIONS = [
+    ("attempts", "kind", "TEXT NOT NULL DEFAULT 'lesson'"),
+    ("attempts", "items", "TEXT NOT NULL DEFAULT '[]'"),
+    ("courses", "area", "TEXT NOT NULL DEFAULT ''"),
+    ("courses", "tags", "TEXT NOT NULL DEFAULT '[]'"),
+    ("courses", "pack", "TEXT NOT NULL DEFAULT ''"),
+    ("courses", "exam_best", "REAL"),
+    ("courses", "exam_passed_at", "TEXT"),
+    ("lessons", "brain_saved_at", "TEXT"),
+]
+
+JSON_FIELDS = {"sections", "content", "answers", "detail", "items", "tags", "subscription"}
 
 
 def now_iso() -> str:
@@ -127,6 +169,14 @@ class Store:
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        with self.lock, self.conn:
+            for table, column, definition in MIGRATIONS:
+                have = {r[1] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+                if column not in have:
+                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     # -- low level -----------------------------------------------------------
 
@@ -180,6 +230,7 @@ class Store:
 
     def delete_course(self, course_id: str) -> None:
         with self.lock, self.conn:
+            self.conn.execute("DELETE FROM reviews WHERE course_id = ?", (course_id,))
             self.conn.execute("DELETE FROM attempts WHERE course_id = ?", (course_id,))
             self.conn.execute("DELETE FROM lessons WHERE course_id = ?", (course_id,))
             self.conn.execute("DELETE FROM courses WHERE id = ?", (course_id,))
@@ -189,8 +240,20 @@ class Store:
     def attempt(self, attempt_id: str) -> dict[str, Any] | None:
         return self.one("SELECT * FROM attempts WHERE id = ?", attempt_id)
 
-    def finished_attempts(self) -> list[dict[str, Any]]:
+    def finished_attempts(self, kind: str | None = None) -> list[dict[str, Any]]:
+        if kind:
+            return self.all("SELECT * FROM attempts WHERE finished_at IS NOT NULL AND kind = ? ORDER BY finished_at", kind)
         return self.all("SELECT * FROM attempts WHERE finished_at IS NOT NULL ORDER BY finished_at")
+
+    def backup(self, target: Path) -> None:
+        """A consistent copy of the live database (SQLite's online backup)."""
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with self.lock:
+            dest = sqlite3.connect(target)
+            try:
+                self.conn.backup(dest)
+            finally:
+                dest.close()
 
     # -- history ---------------------------------------------------------------
 

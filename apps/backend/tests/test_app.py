@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 from app import achievements, progress, svg
 from app.db import get_store
-from tests.conftest import wait_for
+from tests.conftest import right_answer, wait_for, wrong_answer
 
 
 def _course(client, course_id):
@@ -91,9 +91,9 @@ def test_quiz_marks_answers_and_banks_xp(client, fake_llm):
     questions = started["questions"]
     assert len(questions) == 10
     assert all("answer_index" not in q and "model_answer" not in q for q in questions)
-    full = get_store().lesson(lesson_id)["content"]["questions"]
-    for q, truth in zip(questions, full):
-        body = {"question_id": q["id"], "choice": truth["answer_index"]} if q["kind"] == "mcq" else {"question_id": q["id"], "text": "an answer"}
+    assert all(q["id"].startswith(f"{lesson_id}:") for q in questions) and started["fresh"]
+    for q in questions:
+        body = right_answer(get_store(), started["attempt_id"], q)
         result = client.post(f"/api/attempts/{started['attempt_id']}/answer", json=body).json()
         assert result["verdict"] == "correct"
     again = client.post(f"/api/attempts/{started['attempt_id']}/answer", json={"question_id": questions[0]["id"], "choice": 0})
@@ -119,13 +119,20 @@ def test_wrong_answers_fail_the_lesson(client, fake_llm):
     fake_llm.verdict = "incorrect"
     lesson_id = _sample_lesson(client)
     started = client.post(f"/api/lessons/{lesson_id}/attempts").json()
-    full = get_store().lesson(lesson_id)["content"]["questions"]
-    for q, truth in zip(started["questions"], full):
-        body = {"question_id": q["id"], "choice": (truth["answer_index"] + 1) % 4} if q["kind"] == "mcq" else {"question_id": q["id"], "text": "no idea"}
+    for q in started["questions"]:
+        body = wrong_answer(get_store(), started["attempt_id"], q)
         client.post(f"/api/attempts/{started['attempt_id']}/answer", json=body)
     done = client.post(f"/api/attempts/{started['attempt_id']}/finish").json()
     assert done["score"] == 0 and not done["passed"] and done["xp"] == 0
     assert get_store().lesson(lesson_id)["passed_at"] is None
+    # A failed quiz doesn't keep a streak going, but every miss is due for review tomorrow.
+    assert done["streak"]["current"] == 0
+    assert client.get("/api/review").json()["due"] == 0
+    from app import spaced
+    from app.db import local_day
+
+    tomorrow = (date.fromisoformat(local_day()) + timedelta(days=1)).isoformat()
+    assert len(spaced.due_cards(get_store(), tomorrow, limit=None)) == 10
 
 
 def test_open_answers_fall_back_to_key_points(client):
@@ -142,9 +149,11 @@ def test_streaks_and_levels(store):
     today = date.fromisoformat("2026-10-15")
     for offset in (0, 1, 2, 5, 6):
         day = (today - timedelta(days=offset)).isoformat()
-        store.insert("events", {"ts": f"{day}T01:00:00+00:00", "day": day, "kind": "quiz_finished", "xp": 10})
+        store.insert("events", {"ts": f"{day}T01:00:00+00:00", "day": day, "kind": "quiz_finished", "xp": 10, "detail": {"passed": True}})
+    # A failed quiz on day -3 doesn't count.
+    store.insert("events", {"ts": "2026-10-12T01:00:00+00:00", "day": "2026-10-12", "kind": "quiz_finished", "xp": 0, "detail": {"passed": False}})
     s = progress.streak(store, today.isoformat())
-    assert s == {"current": 3, "best": 3, "today_done": True, "at_risk": False}
+    assert (s["current"], s["best"], s["today_done"], s["at_risk"], s["freezes"]) == (3, 3, True, False, 0)
     s = progress.streak(store, (today + timedelta(days=1)).isoformat())
     assert s["current"] == 3 and s["at_risk"]
     assert progress.streak(store, (today + timedelta(days=2)).isoformat())["current"] == 0
@@ -157,7 +166,7 @@ def test_streaks_and_levels(store):
 def test_achievement_board_shows_progress(store):
     for offset in range(4):
         day = (date(2026, 10, 1) + timedelta(days=offset)).isoformat()
-        store.insert("events", {"ts": f"{day}T01:00:00+00:00", "day": day, "kind": "quiz_finished", "xp": 10})
+        store.insert("events", {"ts": f"{day}T01:00:00+00:00", "day": day, "kind": "quiz_finished", "xp": 10, "detail": {"passed": True}})
     board = {a["id"]: a for a in achievements.board(store)}
     assert board["week-warrior"]["value"] == 4 and board["week-warrior"]["target"] == 7
     fresh = {a["id"] for a in achievements.check(store)}

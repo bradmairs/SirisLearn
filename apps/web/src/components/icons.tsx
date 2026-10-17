@@ -1,5 +1,5 @@
 import {
-  Atom, Binary, Book, BookMarked, BookOpenCheck, Brain, Briefcase, Calculator, Camera, ChefHat, CircleCheckBig, Code,
+  Archive, Atom, BadgeCheck, Binary, Medal, Repeat, Snowflake, Book, BookMarked, BookOpenCheck, Brain, Briefcase, Calculator, Camera, ChefHat, CircleCheckBig, Code,
   Compass, Cpu, Crosshair, Crown, Dna, Dumbbell, Earth, Eye, Factory, Feather, Flame, FlaskConical, Footprints, Gavel,
   Globe, GraduationCap, Hammer, HeartPulse, Landmark, Languages, Leaf, Library, Lightbulb, LineChart, Map, Microscope,
   Moon, Mountain, Music, Palette, PenLine, PiggyBank, Plane, Rocket, RotateCcw, Scale, Shapes, Shield, Sprout, Sun,
@@ -18,6 +18,14 @@ const ICONS: Record<string, LucideIcon> = {
   footprints: Footprints, shapes: Shapes, flame: Flame, crown: Crown, target: Target, crosshair: Crosshair,
   library: Library, "book-open-check": BookOpenCheck, "book-marked": BookMarked, sun: Sun, "pen-line": PenLine,
   eye: Eye, "circle-check-big": CircleCheckBig, timer: Timer, moon: Moon, sunrise: Sunrise, "rotate-ccw": RotateCcw,
+  repeat: Repeat, archive: Archive, "badge-check": BadgeCheck, medal: Medal, snowflake: Snowflake,
+};
+
+/** Library areas (app/prompts.py AREAS), with a label each. */
+export const AREAS: Record<string, string> = {
+  engineering: "Engineering", technology: "Technology", science: "Science", maths: "Maths", business: "Business",
+  finance: "Finance", health: "Health", languages: "Languages", humanities: "Humanities", arts: "Arts",
+  hobbies: "Hobbies", other: "Other",
 };
 
 const HUES = ["#5fd3ff", "#8af5c8", "#a78bfa", "#fbbf24", "#f472b6", "#60a5fa", "#2dd4bf", "#fb923c"];

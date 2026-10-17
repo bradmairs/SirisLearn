@@ -5,9 +5,12 @@ the history page, the achievements and the SirisOS widget.
   right open answer (7 for a partly right one), +20 the first time a lesson
   is passed (70%+), +15 for a perfect 10/10, +100 for finishing a course.
 - **Level** n needs 50 * n * (n - 1) XP: 100 for level 2, 300 for 3, 600 for 4...
-- **Streak**: consecutive days (in SIRISLEARN_TIMEZONE) with at least one
-  finished quiz. Until today's quiz is done, yesterday's streak still counts
-  but is "at risk".
+- **Streak**: consecutive days (in SIRISLEARN_TIMEZONE) with a passed lesson
+  quiz (70%+), a finished daily review or a passed final exam. A failed quiz
+  doesn't count. Until today's is done, yesterday's streak still counts but
+  is "at risk".
+- **Streak freezes**: one is earned every 7 days of a streak (hold up to 2).
+  A single missed day is covered by a freeze automatically.
 - **Daily goal**: XP to earn each day (default 50, changeable in Settings).
 """
 
@@ -26,7 +29,14 @@ XP_OPEN_PARTIAL = 7
 XP_PASS = 20
 XP_PERFECT = 15
 XP_COURSE = 100
+XP_REVIEW_CORRECT = 5
+XP_REVIEW_PARTIAL = 2
+XP_REVIEW_DONE = 10
+XP_EXAM = 150
 PASS_MARK = 0.7
+EXAM_PASS_MARK = 0.8
+FREEZE_EVERY = 7
+MAX_FREEZES = 2
 
 
 def level_for(xp: int) -> dict[str, Any]:
@@ -44,8 +54,24 @@ def daily_goal(store: Store) -> int:
         return config.default_daily_goal()
 
 
+def qualifies(event: dict[str, Any]) -> bool:
+    """Does this event keep the streak alive?"""
+    detail = event.get("detail") or {}
+    if event["kind"] == "review_finished":
+        return True
+    if event["kind"] == "exam_finished":
+        return bool(detail.get("passed"))
+    if event["kind"] == "quiz_finished":
+        if "passed" in detail:
+            return bool(detail["passed"])
+        total = detail.get("total") or 0
+        return bool(total) and (detail.get("correct") or 0) / total >= PASS_MARK
+    return False
+
+
 def active_days(store: Store) -> list[str]:
-    return [r["day"] for r in store.all("SELECT DISTINCT day FROM events WHERE kind = 'quiz_finished' ORDER BY day")]
+    events = store.all("SELECT kind, day, detail FROM events WHERE kind IN ('quiz_finished', 'review_finished', 'exam_finished')")
+    return sorted({e["day"] for e in events if qualifies(e)})
 
 
 def runs(days: list[str]) -> list[tuple[str, str, int]]:
@@ -60,19 +86,50 @@ def runs(days: list[str]) -> list[tuple[str, str, int]]:
     return out
 
 
+def walk(days: list[str]) -> dict[str, Any]:
+    """Replay the history: streak length, best, freezes in hand and the
+    days a freeze covered."""
+    current = best = freezes = 0
+    frozen: list[str] = []
+    prev: date | None = None
+    for raw in sorted(set(days)):
+        day = date.fromisoformat(raw)
+        gap = (day - prev).days if prev else None
+        if gap == 1:
+            current += 1
+        elif gap == 2 and freezes > 0:
+            freezes -= 1
+            frozen.append((prev + timedelta(days=1)).isoformat())  # type: ignore[operator]
+            current += 1
+        else:
+            current = 1
+        if current % FREEZE_EVERY == 0:
+            freezes = min(MAX_FREEZES, freezes + 1)
+        best = max(best, current)
+        prev = day
+    return {"current": current, "best": best, "freezes": freezes, "frozen": frozen, "last": prev}
+
+
 def streak(store: Store, today: str | None = None) -> dict[str, Any]:
-    today = today or local_day()
-    yesterday = (date.fromisoformat(today) - timedelta(days=1)).isoformat()
-    all_runs = runs(active_days(store))
-    current = 0
-    if all_runs and all_runs[-1][1] in (today, yesterday):
-        current = all_runs[-1][2]
-    done = bool(all_runs) and all_runs[-1][1] == today
+    today_d = date.fromisoformat(today or local_day())
+    state = walk(active_days(store))
+    last: date | None = state["last"]
+    gap = (today_d - last).days if last else None
+    current, freezes, frozen = state["current"], state["freezes"], list(state["frozen"])
+    if gap is None or gap > 2 or (gap == 2 and freezes == 0):
+        current = 0
+    elif gap == 2:  # yesterday was missed: a freeze is holding the streak
+        freezes -= 1
+        frozen.append((today_d - timedelta(days=1)).isoformat())
+    done = gap == 0
     return {
         "current": current,
-        "best": max((r[2] for r in all_runs), default=0),
+        "best": state["best"],
         "today_done": done,
         "at_risk": current > 0 and not done,
+        "freezes": freezes,
+        "frozen_days": frozen[-30:],
+        "freeze_in_use": gap == 2 and current > 0,
     }
 
 
@@ -109,6 +166,7 @@ def continue_learning(store: Store) -> dict[str, Any] | None:
 
 def summary(store: Store) -> dict[str, Any]:
     """Home screen and SirisOS widget numbers."""
+    from app import spaced
     from app.achievements import catalogue
 
     today = local_day()
@@ -135,6 +193,7 @@ def summary(store: Store) -> dict[str, Any]:
         },
         "activity": {"quizzes": today_events["quiz_finished"], "lessons_passed": today_events["lesson_passed"]},
         "continue": continue_learning(store),
+        "review": spaced.status(store, today),
         "achievements": {
             "unlocked": len(unlocked), "total": len(names),
             "recent": [{"id": k, "title": names[k]["title"], "icon": names[k]["icon"], "unlocked_at": v} for k, v in recent if k in names],
@@ -156,6 +215,7 @@ def history(store: Store, days: int = 182, before: int | None = None, limit: int
     read = store.one("SELECT COUNT(*) AS n FROM events WHERE kind = 'lesson_read'") or {"n": 0}
     events = store.events(limit=limit, before=before)
     return {
+        "today": today.isoformat(),
         "heatmap": heatmap,
         "goal": goal,
         "stats": {

@@ -13,7 +13,7 @@ from typing import Any
 
 from app import config
 from app.db import Store
-from app.progress import active_days, daily_goal, runs
+from app.progress import active_days, daily_goal, walk
 
 # id, title, description, icon (lucide), stat, target, tier
 CATALOGUE: list[tuple[str, str, str, str, str, int, str]] = [
@@ -41,6 +41,12 @@ CATALOGUE: list[tuple[str, str, str, str, str, int, str]] = [
     ("night-owl", "Night owl", "Finish a quiz after 10 pm.", "moon", "night_quizzes", 1, "bronze"),
     ("early-bird", "Early bird", "Finish a quiz before 7 am.", "sunrise", "early_quizzes", 1, "bronze"),
     ("comeback", "Comeback", "Come back to learning after a week or more away.", "rotate-ccw", "comebacks", 1, "bronze"),
+    ("first-review", "Look back", "Finish your first daily review.", "repeat", "reviews", 1, "bronze"),
+    ("reviewer", "Spaced out", "Finish 25 daily reviews.", "repeat", "reviews", 25, "silver"),
+    ("long-memory", "Long memory", "Get 50 cards to the top box (two months between reviews).", "archive", "top_box", 50, "gold"),
+    ("certified", "Certified", "Pass a course's final exam.", "badge-check", "exams_passed", 1, "silver"),
+    ("credentialed", "Credentialed", "Pass 5 final exams.", "medal", "exams_passed", 5, "platinum"),
+    ("ice-cold", "Ice cold", "Have a streak freeze save your streak.", "snowflake", "freezes_used", 1, "bronze"),
 ]
 
 
@@ -53,11 +59,12 @@ def catalogue() -> list[dict[str, Any]]:
 
 def stats(store: Store) -> dict[str, int]:
     tz = config.timezone()
-    attempts = store.finished_attempts()
-    answers = [a for attempt in attempts for a in attempt["answers"].values()]
+    attempts = store.finished_attempts("lesson")
+    answers = [a for attempt in store.finished_attempts() for a in attempt["answers"].values()]
     finished_local = [datetime.fromisoformat(a["finished_at"]).astimezone(tz) for a in attempts]
     per_day = Counter(t.date() for t in finished_local)
     days = active_days(store)
+    state = walk(days)
     gaps = [(date.fromisoformat(b) - date.fromisoformat(a)).days for a, b in zip(days, days[1:])]
     by_day = store.xp_by_day()
     goal = daily_goal(store)
@@ -65,7 +72,7 @@ def stats(store: Store) -> dict[str, int]:
     return {
         "quizzes": len(attempts),
         "perfect_quizzes": sum(1 for a in attempts if a["total"] and a["correct"] >= a["total"]),
-        "best_streak": max((r[2] for r in runs(days)), default=0),
+        "best_streak": state["best"],
         "courses_created": count("SELECT COUNT(*) AS n FROM events WHERE kind = 'course_created'"),
         "courses_completed": count("SELECT COUNT(*) AS n FROM events WHERE kind = 'course_completed'"),
         "courses_touched": count("SELECT COUNT(DISTINCT course_id) AS n FROM events WHERE kind = 'lesson_passed'"),
@@ -78,6 +85,10 @@ def stats(store: Store) -> dict[str, int]:
         "night_quizzes": sum(1 for t in finished_local if t.hour >= 22),
         "early_quizzes": sum(1 for t in finished_local if 4 <= t.hour < 7),
         "comebacks": sum(1 for g in gaps if g >= 8),
+        "reviews": count("SELECT COUNT(*) AS n FROM events WHERE kind = 'review_finished'"),
+        "top_box": count("SELECT COUNT(*) AS n FROM reviews WHERE box >= 5"),
+        "exams_passed": count("SELECT COUNT(*) AS n FROM courses WHERE exam_passed_at IS NOT NULL"),
+        "freezes_used": len(state["frozen"]),
     }
 
 

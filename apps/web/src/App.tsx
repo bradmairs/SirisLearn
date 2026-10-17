@@ -13,6 +13,9 @@ const Library = lazy(() => import("./screens/Library").then((m) => ({ default: m
 const Course = lazy(() => import("./screens/Course").then((m) => ({ default: m.Course })));
 const Lesson = lazy(() => import("./screens/Lesson").then((m) => ({ default: m.Lesson })));
 const Quiz = lazy(() => import("./screens/Quiz").then((m) => ({ default: m.Quiz })));
+const Review = lazy(() => import("./screens/Quiz").then((m) => ({ default: m.Review })));
+const Exam = lazy(() => import("./screens/Quiz").then((m) => ({ default: m.Exam })));
+const Certificate = lazy(() => import("./screens/Certificate").then((m) => ({ default: m.Certificate })));
 const History = lazy(() => import("./screens/History").then((m) => ({ default: m.History })));
 const Awards = lazy(() => import("./screens/Awards").then((m) => ({ default: m.Awards })));
 const Settings = lazy(() => import("./screens/Settings").then((m) => ({ default: m.Settings })));
@@ -54,6 +57,9 @@ function Shell({ user, onSignOut }: { user: string; onSignOut: () => void }) {
             <Route path="/course/:id" element={<Course />} />
             <Route path="/lesson/:id" element={<Lesson />} />
             <Route path="/lesson/:id/quiz" element={<Quiz />} />
+            <Route path="/review" element={<Review />} />
+            <Route path="/course/:id/exam" element={<Exam />} />
+            <Route path="/certificate/:id" element={<Certificate />} />
             <Route path="/history" element={<History />} />
             <Route path="/awards" element={<Awards />} />
             <Route path="/settings" element={<Settings onSignOut={onSignOut} />} />

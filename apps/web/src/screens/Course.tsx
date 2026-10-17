@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Archive, ArchiveRestore, ChevronRight, CircleAlert, CircleCheck, LoaderCircle, RefreshCw, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, Award, BadgeCheck, ChevronRight, CircleAlert, CircleCheck, Lock, LoaderCircle, RefreshCw, Trash2 } from "lucide-react";
 import { del, patch, post } from "../api/client";
 import { useApi } from "../api/useApi";
 import type { CourseDetail, LessonSummary } from "../api/types";
 import { Glass } from "../components/Glass";
-import { CourseIcon } from "../components/icons";
+import { AREAS, CourseIcon } from "../components/icons";
 import { Loading, PageHead } from "../components/PageHead";
 import { Ring } from "../components/Ring";
 import { cap } from "./Library";
@@ -47,6 +47,12 @@ export function Course() {
         <div className="course-hero__text">
           <p>{course.summary || `Planning a course on "${course.topic}"…`}</p>
           {course.notes && <p className="muted">Your notes: {course.notes}</p>}
+          {(course.area || course.tags.length > 0) && (
+            <div className="tag-row">
+              {course.area && <Link className="chip chip--button" to={`/library?area=${course.area}`}>{AREAS[course.area] ?? course.area}</Link>}
+              {course.tags.map((t) => <span key={t} className="chip chip--tag">#{t}</span>)}
+            </div>
+          )}
         </div>
         {course.status === "ready" && (
           <Ring value={course.progress.percent / 100} size={84} label={`${course.progress.percent}% complete`} color={course.completed_at ? "var(--good)" : "var(--accent)"}>
@@ -87,6 +93,22 @@ export function Course() {
         </section>
       ))}
 
+      {course.status === "ready" && course.progress.lessons > 0 && <ExamCard course={course} />}
+
+      {course.related.length > 0 && (
+        <>
+          <h2 className="section-title">Related courses</h2>
+          <div className="related">
+            {course.related.map((r) => (
+              <Glass key={r.id} as={Link} to={`/course/${r.id}`} interactive className="related__item">
+                <CourseIcon icon={r.icon} id={r.id} size={36} />
+                <span><b>{r.title}</b><br /><span className="muted">{cap(r.level)}</span></span>
+              </Glass>
+            ))}
+          </div>
+        </>
+      )}
+
       <div className="row course-actions">
         <button type="button" className="chip chip--button" onClick={() => act(() => patch(`/api/courses/${course.id}`, { archived: !course.archived }))} disabled={working}>
           {course.archived ? <><ArchiveRestore size={15} aria-hidden="true" /> Unarchive</> : <><Archive size={15} aria-hidden="true" /> Archive</>}
@@ -94,6 +116,36 @@ export function Course() {
         <button type="button" className="chip chip--button chip--danger" onClick={remove}><Trash2 size={15} aria-hidden="true" /> Delete</button>
       </div>
     </>
+  );
+}
+
+function ExamCard({ course }: { course: CourseDetail }) {
+  const exam = course.exam;
+  if (exam.passed_at) {
+    return (
+      <Glass className="exam-card exam-card--passed">
+        <span className="exam-card__icon" aria-hidden="true"><BadgeCheck /></span>
+        <div style={{ flex: 1 }}>
+          <p className="stat-card__title">Final exam passed · {Math.round((exam.best ?? 0) * 100)}%</p>
+          <p className="muted">Certified {new Date(exam.passed_at).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}</p>
+        </div>
+        <Glass as={Link} to={`/certificate/${course.id}`} variant="tint" shape="pill" interactive className="button button--small"><Award aria-hidden="true" /> Certificate</Glass>
+      </Glass>
+    );
+  }
+  return (
+    <Glass className={`exam-card ${exam.unlocked ? "" : "exam-card--locked"}`}>
+      <span className="exam-card__icon" aria-hidden="true">{exam.unlocked ? <BadgeCheck /> : <Lock />}</span>
+      <div style={{ flex: 1 }}>
+        <p className="stat-card__title">Final exam</p>
+        <p className="muted">
+          {exam.unlocked
+            ? `${exam.questions} questions from every lesson. Score ${Math.round(exam.pass_mark * 100)}% to earn the certificate.${exam.best !== null ? ` Best so far: ${Math.round(exam.best * 100)}%.` : ""}`
+            : `Pass ${exam.lessons_left} more lesson${exam.lessons_left === 1 ? "" : "s"} to unlock it.`}
+        </p>
+      </div>
+      {exam.unlocked && <Glass as={Link} to={`/course/${course.id}/exam`} variant="tint" shape="pill" interactive className="button button--small">Start exam</Glass>}
+    </Glass>
   );
 }
 
