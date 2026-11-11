@@ -11,9 +11,9 @@ PACKS = coursepacks.available()
 LESSONS = [(p["id"], l) for p in PACKS for s in p["sections"] for l in s["lessons"]]
 
 
-def test_all_nine_courses_ship():
+def test_all_built_in_courses_ship():
     assert {p["id"] for p in PACKS} >= {f"{t}-{lvl}" for t in ("docker", "linux", "water")
-                                        for lvl in ("beginner", "intermediate", "advanced")}
+                                        for lvl in ("beginner", "intermediate", "advanced")} | {"ai-general", "ai-use"}
 
 
 @pytest.mark.parametrize("pack_id,entry", LESSONS, ids=[f"{p}:{l['title']}" for p, l in LESSONS])
