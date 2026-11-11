@@ -1,6 +1,6 @@
 # SirisLearn
 
-**Version 1.2** ([release notes](docs/releases/1.2.md))
+**Version 1.3** ([release notes](docs/releases/1.3.md))
 
 SirisLearn is a private learning app in the Siris family, something like
 LinkedIn Learning but built for one person. Give it any topic and it writes
@@ -86,7 +86,12 @@ work without a model; with one, retakes still get fresh questions.
 | Linux | Linux from scratch | Linux power user | Linux internals and administration |
 | Water and civil engineering | Water and civil engineering fundamentals | Water engineering design | Water engineering at expert level |
 
-Each has two sections of three lessons, with a diagram per lesson and ten
+Two AI courses of eight lessons each: *How AI works* (intermediate: ML, neural
+networks, LLMs, limits, agents, evaluation, risk and regulation) and *Leading
+with AI in engineering consulting* (advanced: prompting, checking, client data,
+automation, governance, proving value and leading adoption).
+
+The topic courses have two sections of three lessons, with a diagram per lesson and ten
 questions per lesson (multiple choice and open, some on pictures). Packs are
 added once by id; editing a pack later doesn't change a copy already added.
 
