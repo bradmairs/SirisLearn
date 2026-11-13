@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Award, BadgeCheck, BookOpen, Brain, CircleCheck, Flag, GraduationCap, ListChecks, Repeat, Sparkles, Target } from "lucide-react";
+import { Award, BadgeCheck, BookOpen, Brain, CircleCheck, Dumbbell, Flag, GraduationCap, ListChecks, Newspaper, RefreshCw, Repeat, Route, Sparkles, Target } from "lucide-react";
 import { api } from "../api/client";
 import { useApi } from "../api/useApi";
 import type { History as HistoryData, HistoryEvent } from "../api/types";
@@ -20,6 +20,10 @@ const EVENTS: Record<HistoryEvent["kind"], { Icon: typeof Award; text: (e: Histo
   review_finished: { Icon: Repeat, text: (e) => `${e.title} · ${score(e)}` },
   exam_finished: { Icon: BadgeCheck, text: (e) => `${e.title} · ${score(e)}${(e.detail as { passed?: boolean }).passed ? " · passed" : ""}` },
   brain_saved: { Icon: Brain, text: (e) => `Saved ${e.title} to your Second Brain` },
+  practice_finished: { Icon: Dumbbell, text: (e) => `${e.title} · ${score(e)}` },
+  lesson_refreshed: { Icon: RefreshCw, text: (e) => `Brought ${e.title} up to date` },
+  ai_update: { Icon: Newspaper, text: (e) => `New lesson: ${e.title}` },
+  path_created: { Icon: Route, text: (e) => `Set a learning path: ${e.title}` },
 };
 
 function score(e: HistoryEvent): string {

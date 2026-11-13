@@ -32,6 +32,7 @@ export interface CourseCard {
   pack: string;
   exam_best: number | null;
   exam_passed_at: string | null;
+  stale_lessons: number;
 }
 
 export interface LessonSummary {
@@ -44,6 +45,7 @@ export interface LessonSummary {
   passed_at: string | null;
   read_at: string | null;
   position: number;
+  stale: { written: string; days: number } | null;
 }
 
 export interface ExamStatus {
@@ -73,6 +75,8 @@ export interface Photo {
 export interface LessonDetail extends LessonSummary {
   course: { id: string; title: string; icon: string; level: Level };
   brain_saved_at: string | null;
+  generated_at: string | null;
+  time_sensitive: boolean;
   section: string;
   number: number;
   of: number;
@@ -89,20 +93,25 @@ export interface LessonDetail extends LessonSummary {
     unseen: number;
     photo?: Photo | null;
     photo_query?: string;
+    sources?: number;
+    refreshed_at?: string;
   } | null;
 }
 
+export type QuestionKind = "mcq" | "open" | "scenario" | "calc";
+
 export interface Question {
   id: string;
-  kind: "mcq" | "open";
+  kind: QuestionKind;
   prompt: string;
   svg: string;
   image_alt: string;
   options?: string[];
+  unit?: string;
   lesson_title?: string;
 }
 
-export type QuizKind = "lesson" | "review" | "exam";
+export type QuizKind = "lesson" | "review" | "exam" | "practice";
 
 export interface StartedQuiz {
   attempt_id: string;
@@ -117,7 +126,7 @@ export interface AnswerResult {
   verdict: Verdict;
   score: number;
   xp: number;
-  kind: "mcq" | "open";
+  kind: QuestionKind;
   explanation: string;
   feedback: string;
   choice?: number;
@@ -125,7 +134,20 @@ export interface AnswerResult {
   text?: string;
   model_answer?: string;
   key_points?: string[];
+  points?: { point: string; met: boolean }[];
   marked_by?: string;
+  answer_value?: number;
+  unit?: string;
+  tolerance?: number;
+  working?: string;
+  can_retry?: boolean;
+  hidden?: boolean;
+  covered?: number;
+  of?: number;
+  revealed?: boolean;
+  second_try?: boolean;
+  first_verdict?: Verdict;
+  first_text?: string;
   lesson_id: string;
   lesson_title: string;
   review?: { box: number; due: string };
@@ -188,6 +210,7 @@ export interface QuizResult {
   course_id?: string;
   certificate?: boolean;
   brain?: string;
+  answers?: Record<string, AnswerResult>;
 }
 
 export interface Summary {
@@ -207,7 +230,73 @@ export interface Summary {
     progress: CourseProgress;
   } | null;
   review: ReviewStatus;
+  path: LearningPath | null;
+  weak_spot: WeakSpot | null;
   achievements: { unlocked: number; total: number; recent: { id: string; title: string; icon: string; unlocked_at: string }[] };
+}
+
+export interface WeakSpot {
+  lesson_id: string;
+  title: string;
+  course_id: string;
+  course_title: string;
+  icon: string;
+  answered: number;
+  accuracy: number;
+  last: string;
+  missed: number;
+  ready: boolean;
+}
+
+export interface Insights {
+  days: number;
+  answered: number;
+  weak: WeakSpot[];
+  strong: WeakSpot[];
+  kinds: { kind: string; label: string; answered: number; accuracy: number }[];
+  min_answers: number;
+  weak_below: number;
+}
+
+export interface PathStep {
+  kind: "lesson" | "exam";
+  id: string;
+  title: string;
+  url: string;
+  course_title?: string;
+}
+
+export interface PathCourse {
+  id: string;
+  title: string;
+  icon: string;
+  level: Level;
+  lessons: number;
+  passed: number;
+  exam_passed: boolean;
+  done: boolean;
+  next: PathStep | null;
+}
+
+export type PathStatus = "done" | "on_track" | "behind" | "overdue" | "no_date";
+
+export interface LearningPath {
+  id: string;
+  title: string;
+  description: string;
+  pack: string;
+  target_date: string | null;
+  created_at: string;
+  courses: PathCourse[];
+  units: number;
+  done_units: number;
+  percent: number;
+  done: boolean;
+  next: PathStep | null;
+  status: PathStatus;
+  expected_percent: number | null;
+  days_left: number | null;
+  per_week: number | null;
 }
 
 export interface HistoryEvent {
@@ -215,7 +304,8 @@ export interface HistoryEvent {
   ts: string;
   day: string;
   kind: "course_created" | "course_ready" | "lesson_read" | "quiz_finished" | "lesson_passed" | "course_completed" | "goal_met"
-    | "achievement" | "review_finished" | "exam_finished" | "brain_saved";
+    | "achievement" | "review_finished" | "exam_finished" | "brain_saved" | "practice_finished" | "lesson_refreshed"
+    | "ai_update" | "path_created";
   course_id: string | null;
   lesson_id: string | null;
   title: string;
@@ -261,8 +351,21 @@ export interface Settings {
   brain: { configured: boolean; enabled: boolean };
   sirisos_url: string | null;
   push: { subscriptions: number; reminder_hour: number; review_hour: number };
+  ai_updates: AiUpdates;
+  refresh_days: number;
   usage: Usage;
   today: string;
+}
+
+export interface AiUpdates {
+  allowed: boolean;
+  enabled: boolean;
+  course_id: string | null;
+  last: { title: string; generated_at: string } | null;
+  error: string | null;
+  feeds: number;
+  model: boolean;
+  running: boolean;
 }
 
 export interface Certificate {

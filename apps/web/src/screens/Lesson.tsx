@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Brain, CircleCheck, Clock, ListChecks, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Brain, CalendarClock, CircleCheck, Clock, ListChecks, LoaderCircle, Newspaper, RefreshCw, Sparkles } from "lucide-react";
 import { post } from "../api/client";
 import { useApi } from "../api/useApi";
 import type { LessonDetail } from "../api/types";
@@ -18,6 +18,7 @@ export function Lesson() {
   const { data: lesson, error, reload } = useApi<LessonDetail>(`/api/lessons/${id}`, { poll: (l) => l.status === "writing" || l.status === "pending" });
   const attempts = useApi<Attempt[]>(lesson?.status === "ready" ? `/api/lessons/${id}/attempts` : null);
   const [rewriting, setRewriting] = useState(false);
+  const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
 
   if (error && !lesson) return <><PageHead back="/library" backLabel="Library" title="Lesson" /><div className="error-banner" role="alert">{error}</div></>;
@@ -31,6 +32,17 @@ export function Lesson() {
       reload();
     } finally {
       setRewriting(false);
+    }
+  }
+
+  async function refresh() {
+    setRefreshNote(null);
+    if (!window.confirm("Bring this lesson up to date? It's rewritten from this version (and recent news for AI courses), with a fresh quiz. Your pass and best score are kept.")) return;
+    try {
+      await post(`/api/lessons/${lesson!.id}/refresh`);
+      reload();
+    } catch (err) {
+      setRefreshNote(err instanceof Error ? err.message : "Couldn't start the refresh.");
     }
   }
 
@@ -52,6 +64,18 @@ export function Lesson() {
         </div>
       )}
 
+      {lesson.status === "ready" && lesson.error && <div className="error-banner" role="alert">{lesson.error}</div>}
+      {c && lesson.stale && (
+        <Glass className="stale" role="note">
+          <CalendarClock aria-hidden="true" />
+          <div style={{ flex: 1 }}>
+            <p className="stat-card__title">This lesson may be out of date</p>
+            <p className="muted">It covers things that change quickly, and it was written {Math.round(lesson.stale.days / 30)} months ago.</p>
+            {refreshNote && <p className="tone-critical">{refreshNote}</p>}
+          </div>
+          <button type="button" className="chip chip--button" onClick={refresh}><RefreshCw size={14} aria-hidden="true" /> Bring up to date</button>
+        </Glass>
+      )}
       {c && (
         <>
           <div className="lesson__meta">
@@ -59,6 +83,8 @@ export function Lesson() {
             <span className="chip"><ListChecks size={13} aria-hidden="true" /> {c.question_count} questions</span>
             {lesson.passed_at && <span className="chip tone-good"><CircleCheck size={13} aria-hidden="true" /> Passed · best {Math.round((lesson.best_score ?? 0) * 100)}%</span>}
             {lesson.brain_saved_at && <span className="chip chip--brain"><Brain size={13} aria-hidden="true" /> In your Second Brain</span>}
+            {c.refreshed_at && <span className="chip"><CalendarClock size={13} aria-hidden="true" /> Updated {new Date(c.refreshed_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</span>}
+            {c.sources ? <span className="chip"><Newspaper size={13} aria-hidden="true" /> From {c.sources} news items</span> : null}
             <Listen text={`${lesson.title}.\n\n${c.body}`} />
           </div>
           <Glass className="lesson__body">

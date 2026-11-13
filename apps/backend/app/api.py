@@ -10,7 +10,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
-from app import achievements, generator, llm, progress, prompts, quiz, siris, spaced
+from app import achievements, generator, insights, llm, paths, progress, prompts, quiz, siris, spaced, updates
 from app.auth import require_user
 from app.db import get_store, local_day, now_iso
 
@@ -34,6 +34,20 @@ class Answer(BaseModel):
     text: str | None = Field(None, max_length=4000)
 
 
+class NewPath(BaseModel):
+    title: str = Field(min_length=2, max_length=120)
+    description: str = Field("", max_length=500)
+    course_ids: list[str] = Field(min_length=1, max_length=20)
+    target_date: str | None = Field(None, max_length=10)
+
+
+class PathPatch(BaseModel):
+    title: str | None = Field(None, min_length=2, max_length=120)
+    description: str | None = Field(None, max_length=500)
+    course_ids: list[str] | None = Field(None, min_length=1, max_length=20)
+    target_date: str | None = Field(None, max_length=10)
+
+
 class Ask(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
 
@@ -41,6 +55,7 @@ class Ask(BaseModel):
 class Settings(BaseModel):
     daily_goal: int | None = Field(None, ge=10, le=1000)
     brain_capture: bool | None = None
+    ai_updates: bool | None = None
 
 
 def _course_or_404(course_id: str) -> dict[str, Any]:
@@ -60,17 +75,21 @@ def _lesson_or_404(lesson_id: str) -> dict[str, Any]:
 def _course_card(course: dict[str, Any]) -> dict[str, Any]:
     store = get_store()
     nxt = progress.next_lesson(store, course["id"])
+    stale = sum(1 for l in store.all("SELECT status, content, generated_at FROM lessons WHERE course_id = ? AND content LIKE '%\"time_sensitive\": true%'",
+                                     course["id"]) if generator.stale(l))
     return {
         **{k: course[k] for k in ("id", "topic", "title", "summary", "icon", "level", "length", "status", "error",
                                   "created_at", "updated_at", "completed_at", "area", "tags", "pack", "exam_best", "exam_passed_at")},
         "archived": bool(course["archived"]),
         "progress": progress.course_progress(store, course["id"]),
         "next_lesson": nxt,
+        "stale_lessons": stale,
     }
 
 
 def _lesson_summary(lesson: dict[str, Any]) -> dict[str, Any]:
-    return {k: lesson[k] for k in ("id", "title", "summary", "status", "error", "best_score", "passed_at", "read_at", "position")}
+    return {**{k: lesson[k] for k in ("id", "title", "summary", "status", "error", "best_score", "passed_at", "read_at", "position")},
+            "stale": generator.stale(lesson)}
 
 
 # -- home ----------------------------------------------------------------------
@@ -211,6 +230,8 @@ async def get_lesson(lesson_id: str) -> dict[str, Any]:
         "previous_id": siblings[index - 1]["id"] if index > 0 else None,
         "next_id": siblings[index + 1]["id"] if index + 1 < len(siblings) else None,
         "brain_saved_at": lesson.get("brain_saved_at"),
+        "generated_at": lesson.get("generated_at"),
+        "time_sensitive": bool((lesson.get("content") or {}).get("time_sensitive")),
         "content": content,
     }
 
@@ -224,6 +245,18 @@ async def regenerate_lesson(lesson_id: str) -> dict[str, Any]:
     return _lesson_summary(get_store().lesson(lesson_id))  # type: ignore[arg-type]
 
 
+@router.post("/lessons/{lesson_id}/refresh")
+async def refresh_lesson(lesson_id: str) -> dict[str, Any]:
+    """Rewrite a written lesson from its old version (and, for AI courses, recent AI news)."""
+    lesson = _lesson_or_404(lesson_id)
+    if lesson["status"] != "ready":
+        raise HTTPException(409, "Only a written lesson can be refreshed.")
+    if llm.get_llm() is None:
+        raise HTTPException(503, "No model is set up to rewrite the lesson.")
+    generator.ensure_lesson(lesson_id, refresh=True)
+    return _lesson_summary(get_store().lesson(lesson_id))  # type: ignore[arg-type]
+
+
 @router.post("/lessons/{lesson_id}/attempts", status_code=201)
 async def start_quiz(lesson_id: str) -> dict[str, Any]:
     store = get_store()
@@ -234,6 +267,15 @@ async def start_quiz(lesson_id: str) -> dict[str, Any]:
     if quiz.unseen_count(store, store.lesson(lesson_id)) < quiz.QUIZ_SIZE:  # type: ignore[arg-type]
         generator.extend_questions(lesson_id)  # so the next retake is fresh
     return started
+
+
+@router.post("/lessons/{lesson_id}/practice", status_code=201)
+def start_practice(lesson_id: str) -> dict[str, Any]:
+    """Drill a weak spot: the lesson's questions you've got wrong first."""
+    lesson = _lesson_or_404(lesson_id)
+    if lesson["status"] != "ready":
+        raise HTTPException(409, "This lesson isn't written yet.")
+    return quiz.start_practice(get_store(), lesson)
 
 
 @router.get("/lessons/{lesson_id}/attempts")
@@ -280,14 +322,27 @@ async def answer(attempt_id: str, body: Answer) -> dict[str, Any]:
     attempt = _attempt_or_404(attempt_id)
     if attempt["finished_at"]:
         raise HTTPException(409, "This quiz is already finished.")
-    if body.question_id in attempt["answers"]:
-        raise HTTPException(409, "You've already answered this question.")
     try:
         return await quiz.answer(get_store(), attempt, body.question_id, body.choice, body.text)
+    except quiz.AlreadyAnswered as exc:
+        raise HTTPException(409, str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(404, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+class Reveal(BaseModel):
+    question_id: str
+
+
+@router.post("/attempts/{attempt_id}/reveal")
+def reveal(attempt_id: str, body: Reveal) -> dict[str, Any]:
+    """Show the answer to a question that could still be tried again (giving up the second try)."""
+    try:
+        return quiz.reveal(get_store(), _attempt_or_404(attempt_id), body.question_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 @router.post("/attempts/{attempt_id}/finish")
@@ -297,6 +352,7 @@ async def finish(attempt_id: str) -> dict[str, Any]:
     if attempt["finished_at"]:
         raise HTTPException(409, "This quiz is already finished.")
     result = quiz.finish(store, attempt)
+    result["answers"] = {ref: quiz.reveal(store, store.attempt(attempt_id), ref) for ref in attempt["answers"]}  # type: ignore[arg-type]
     if attempt["kind"] == "lesson":
         lesson = store.lesson(attempt["lesson_id"])
         if lesson and quiz.unseen_count(store, lesson) < quiz.QUIZ_SIZE:
@@ -341,12 +397,60 @@ def start_review() -> dict[str, Any]:
     return started
 
 
+# -- learning paths ----------------------------------------------------------------
+
+
+@router.get("/paths")
+def list_paths() -> list[dict[str, Any]]:
+    return paths.all_paths(get_store())
+
+
+@router.post("/paths", status_code=201)
+def create_path(body: NewPath) -> dict[str, Any]:
+    try:
+        return paths.create(get_store(), body.title, body.description, body.course_ids, body.target_date)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/paths/{path_id}")
+def get_path(path_id: str) -> dict[str, Any]:
+    found = paths.get(get_store(), path_id)
+    if found is None:
+        raise HTTPException(404, "No such path.")
+    return found
+
+
+@router.patch("/paths/{path_id}")
+def patch_path(path_id: str, body: PathPatch) -> dict[str, Any]:
+    try:
+        found = paths.update(get_store(), path_id, **body.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if found is None:
+        raise HTTPException(404, "No such path.")
+    return found
+
+
+@router.delete("/paths/{path_id}", status_code=204, response_class=Response)
+def delete_path(path_id: str) -> Response:
+    if not paths.delete(get_store(), path_id):
+        raise HTTPException(404, "No such path.")
+    return Response(status_code=204)
+
+
 # -- progress --------------------------------------------------------------------
 
 
 @router.get("/history")
 def history(days: int = Query(182, ge=7, le=730), before: int | None = None) -> dict[str, Any]:
     return progress.history(get_store(), days=days, before=before)
+
+
+@router.get("/insights")
+def get_insights() -> dict[str, Any]:
+    """Weak spots and accuracy by kind of question."""
+    return insights.report(get_store())
 
 
 @router.get("/achievements")
@@ -388,6 +492,8 @@ def get_settings() -> dict[str, Any]:
         "brain": {"configured": siris.brain_configured(), "enabled": siris.brain_enabled(store)},
         "sirisos_url": siris.sirisos_url() or None,
         "push": push.status(store),
+        "ai_updates": updates.status(store),
+        "refresh_days": generator.refresh_days(),
         "usage": _usage(),
         "today": local_day(),
     }
@@ -400,7 +506,21 @@ def put_settings(body: Settings) -> dict[str, Any]:
         store.set_setting("daily_goal", str(body.daily_goal))
     if body.brain_capture is not None:
         store.set_setting("brain_capture", "on" if body.brain_capture else "off")
+    if body.ai_updates is not None:
+        store.set_setting("ai_updates", "on" if body.ai_updates else "off")
     return get_settings()
+
+
+@router.post("/updates/ai", status_code=202)
+def run_ai_update() -> dict[str, Any]:
+    """Write this month's "What's new in AI" lesson now (in the background)."""
+    store = get_store()
+    if not updates.allowed():
+        raise HTTPException(409, "Monthly AI updates are turned off on the server (SIRISLEARN_AI_UPDATES).")
+    if llm.get_llm() is None:
+        raise HTTPException(503, "No model is set up to write the update.")
+    updates.start(store)
+    return updates.status(store)
 
 
 # -- push notifications ----------------------------------------------------------------

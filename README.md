@@ -1,6 +1,6 @@
 # SirisLearn
 
-**Version 1.3** ([release notes](docs/releases/1.3.md))
+**Version 1.4** ([release notes](docs/releases/1.4.md))
 
 SirisLearn is a private learning app in the Siris family, something like
 LinkedIn Learning but built for one person. Give it any topic and it writes
@@ -31,10 +31,16 @@ reminders to your phone.
    **Listen** reads a lesson aloud with your device's voice, and **Ask Siris**
    explains anything in it another way.
 4. **Each lesson ends with a 10-question quiz**: 6–7 multiple choice and 3–4
-   written answers, with at least 3 picture questions. Every answer is marked
-   straight away with an explanation; written answers are marked by Claude
-   against the lesson's key points. Got one wrong? **Help me understand**
-   asks Siris why.
+   written answers, with at least 3 picture questions. Written answers are
+   explanations, **calculations** (a number with its unit, right within a
+   tolerance, with the worked solution shown after; the right digits at the
+   wrong power of ten count as partly right) where the lesson teaches one, or
+   a **scenario** (a short real-world case, marked against a rubric) for
+   intermediate and advanced courses. Every answer is marked straight away
+   with an explanation; written answers show which key points you covered
+   and missed. Didn't get a written or calculation answer right? You get a
+   hint, then **Try again** once for half marks or **Show answer** (the answer
+   stays hidden until then); **Help me understand** asks Siris why.
 5. **Retakes get fresh questions.** After each quiz a new set is written in
    the background, so a retake tests understanding, not memory of the last
    quiz. Without a model, questions you've seen come back with shuffled
@@ -44,33 +50,52 @@ reminders to your phone.
    across the course; 80% earns a printable **certificate**.
 7. **The daily review** brings back questions you've answered, spaced out
    (the Leitner system): right answers move up a box and return after 3, 7,
-   14, 30 then 60 days; wrong ones return tomorrow.
+   14, 30 then 60 days; wrong ones return tomorrow. When more are due than
+   fit, your weak spots come first.
+8. **Weak spots** shows your accuracy by kind of question (multiple choice,
+   written, scenario, calculation, picture) and the lessons you're getting
+   wrong (4+ answers, under 70% in the last `SIRISLEARN_INSIGHT_DAYS`, default
+   90). **Practise** drills one: its questions you've missed first.
+9. **Learning paths** chain courses towards a goal with an optional target
+   date, show whether you're on track and how many steps a week it takes, and
+   appear on Today and in SirisOS. *AI leader* (How AI works, then Leading
+   with AI in engineering consulting) is added with the AI courses.
+10. **Lessons stay current.** A lesson about things that change quickly
+    (regulations, products, AI) is flagged *may be out of date* after
+    `SIRISLEARN_REFRESH_DAYS` (default 180), and **Bring up to date** rewrites
+    it from the old version (and, for AI courses, recent AI news) with a fresh
+    quiz. Each month **What's new in AI** gets a new lesson, written from AI
+    news feeds with its sources (needs a model).
 
 ### XP, levels, streaks and awards
 
 | | |
 | --- | --- |
-| XP | 10 per right multiple-choice answer, 15 per right written answer (7 if partly right), +20 the first time you pass a lesson, +15 for 10/10, +100 for finishing a course, +150 for passing its final exam; in the daily review 5 per right answer (2 partly) +10 for finishing |
+| XP | 10 per right multiple-choice answer, 15 per right written or calculation answer (7 if partly right), 20 per right scenario (10 partly), half on a second try, +20 the first time you pass a lesson, +15 for 10/10, +100 for finishing a course, +150 for passing its final exam; in the daily review and practice 5 per right answer (2 partly), +10 for finishing a review |
 | Level | Level *n* needs 50·*n*·(*n*−1) XP: 100 for level 2, 300 for 3, 600 for 4… |
 | Daily goal | XP per day (default 50; Casual 20 to Intense 200 in Settings) |
-| Streak | Days in a row (in `SIRISLEARN_TIMEZONE`) with a **passed** quiz, a daily review or a passed exam. A failed quiz doesn't count. Until today's is done the streak is "at risk" |
+| Streak | Days in a row (in `SIRISLEARN_TIMEZONE`) with a **passed** quiz, a daily review, a passed practice round or a passed exam. A failed quiz doesn't count. Until today's is done the streak is "at risk" |
 | Streak freezes | One earned for every 7 days of streak (hold up to 2). A single missed day uses one automatically; frozen days show on the heatmap |
 | Awards | 30, bronze to platinum: streaks (3 → 100 days), perfect scores, lessons and courses finished, final exams, daily reviews, long-memory cards, XP milestones, written and picture answers, goal days, freezes, Night owl, Early bird, Marathon, Comeback… Locked ones show your progress |
 
 ### Screens
 
 - **Today**: streak (with freezes), daily-goal ring, level, the daily review,
-  *Continue*, *Learn something new* with topic ideas, your courses, recent awards.
+  your learning path, your top weak spot, *Continue*, *Learn something new*
+  with topic ideas, your courses, recent awards.
+- **Paths** and **Weak spots** (in the menu): learning paths and their pace;
+  accuracy by kind of question and lessons to practise.
 - **Library**: every course with its progress, filtered by status and area, as
   a grid or a **map** (courses by area, in level order).
 - **Course**: sections and lessons, scores, the final exam, related courses.
-- **Lesson**: photo, diagram, the read, key points, Listen, Ask Siris, *Start quiz*.
+- **Lesson**: photo, diagram, the read, key points, Listen, Ask Siris, *Start quiz*,
+  and *Bring up to date* when it may be dated.
 - **Quiz, daily review and final exam**: one question at a time, then results:
   score, XP, streak, goal, level-ups, new awards and a review of every answer.
 - **Certificate**: printable (or save as PDF) once you pass a course's exam.
 - **History**: a six-month heatmap, totals and a day-by-day timeline.
 - **Awards** and **Settings** (daily goal, notifications, Second Brain, the
-  course writer and what it has cost).
+  monthly AI update, the course writer and what it has cost).
 
 Deleting a course keeps its history and awards.
 
@@ -92,8 +117,11 @@ with AI in engineering consulting* (advanced: prompting, checking, client data,
 automation, governance, proving value and leading adoption).
 
 The topic courses have two sections of three lessons, with a diagram per lesson and ten
-questions per lesson (multiple choice and open, some on pictures). Packs are
-added once by id; editing a pack later doesn't change a copy already added.
+or more questions per lesson (multiple choice and written, some on pictures;
+the water and AI courses add calculations and scenarios). Packs are added
+once by id. When a pack's `version` goes up, the copy in your library is
+upgraded in place on the next start, keeping your progress (a lesson you've
+brought up to date is left alone).
 
 ## Deploy
 
@@ -124,7 +152,11 @@ Everything lives in `data/sirislearn.db` (SQLite), with a daily copy in
 | `SIRISLEARN_PHOTOS` | Wikimedia Commons photos for lessons (default on) |
 | `SIRISLEARN_REMINDER_HOUR`, `SIRISLEARN_REVIEW_HOUR`, `SIRISLEARN_PUSH_CONTACT` | Phone reminders (turned on per device in Settings) |
 | `SIRISLEARN_BACKUP_DAYS` | Daily database backups kept in `data/backups` (default 14) |
-| `SIRISLEARN_SEED_PACKS` | Add the built-in courses once (default `true`) |
+| `SIRISLEARN_SEED_PACKS` | Add the built-in courses once, and upgrade them when a pack's version goes up (default `true`) |
+| `SIRISLEARN_REFRESH_DAYS` | When a time-sensitive lesson is flagged as possibly out of date (default 180) |
+| `SIRISLEARN_AI_UPDATES`, `SIRISLEARN_AI_UPDATE_DAY` | The monthly What's new in AI lesson (default on, from the 1st; it can also be turned off in Settings) |
+| `SIRISLEARN_AI_FEEDS` | Comma-separated https RSS/Atom feeds it's written from (default: a few AI lab and news blogs) |
+| `SIRISLEARN_INSIGHT_DAYS` | How far back Weak spots looks (default 90) |
 | `SIRISLEARN_SEED_SAMPLE` | Add the starter course on first run (default `true`) |
 
 Without a model, the app still works (history, awards, the starter course and
@@ -159,7 +191,7 @@ in this app):
 | Route | Returns |
 | --- | --- |
 | `GET /api/hub/v1/status` | `{status, version, llm: {provider, model, configured}}` |
-| `GET /api/hub/v1/summary` | `streak {current, best, today_done, at_risk, freezes}`, `xp {total, today, goal, goal_met, week}`, `level`, `courses {total, active, completed, planning}`, `continue {course_title, lesson_title, url, progress}`, `review {due, next_due, cards}`, `achievements`, `recent` |
+| `GET /api/hub/v1/summary` | `streak {current, best, today_done, at_risk, freezes}`, `xp {total, today, goal, goal_met, week}`, `level`, `courses {total, active, completed, planning}`, `continue {course_title, lesson_title, url, progress}`, `review {due, next_due, cards}`, `achievements`, `recent`, and (1.4) `paths [{id, title, percent, status: on_track \| behind \| overdue \| no_date, target_date, days_left, per_week, next {title, url}, url}]` |
 | `GET /api/hub/v1/search?q=` | `{hits: [{title, subtitle, url, kind: "course" \| "lesson"}]}` |
 
 ## Development

@@ -420,3 +420,57 @@ code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.92em
 .prose table { width: 100%; border-collapse: collapse; font-size: 15px; }
 .prose th, .prose td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
 .prose th { color: var(--accent); font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+/* 1.4: calculation and scenario questions, weak spots, paths, refreshing */
+.calc-answer { display: flex; align-items: center; gap: 10px; }
+.calc-answer__input { max-width: 220px; font-size: 18px; font-variant-numeric: tabular-nums; }
+.calc-answer__unit { font-weight: 650; color: var(--ink-2); }
+.question__first { font-size: 13.5px; margin: 0; }
+.points { list-style: none; margin: 4px 0 10px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.points li { display: flex; align-items: flex-start; gap: 8px; line-height: 1.4; }
+.points li svg { flex: none; margin-top: 2px; }
+.points__met { color: var(--good); }
+.points__missed { color: var(--ink-2); }
+.points__missed svg { color: var(--critical); }
+.working { margin: 6px 0 10px; padding: 10px 12px; border-radius: var(--r-sm, 10px); background: rgba(255, 255, 255, 0.05); }
+.working__title { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin: 0 0 4px !important; }
+.working .prose ol, .working ol { margin: 0; padding-left: 20px; }
+.feedback__buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+
+.weak { display: flex; align-items: center; gap: 14px; padding: 14px 16px; text-decoration: none; color: var(--ink); flex-wrap: wrap; }
+.weak__text { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 2px; }
+.weak__title { font-weight: 650; }
+.weak__score { font-weight: 700; font-size: 18px; }
+.weak__actions { display: flex; align-items: center; gap: 8px; }
+.button.button--small { padding: 7px 14px; font-size: 14px; }
+.kind-bars { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+.kind-bars .section-title { margin: 0 0 4px; }
+.kind-bars__row { display: grid; grid-template-columns: minmax(110px, 160px) 1fr auto; align-items: center; gap: 12px; }
+.kind-bars__label { font-size: 14.5px; }
+.kind-bars__value { font-weight: 650; font-variant-numeric: tabular-nums; min-width: 72px; text-align: right; }
+
+.path-card { display: flex; align-items: center; gap: 16px; padding: 16px 20px; text-decoration: none; color: var(--ink); margin-bottom: 4px; }
+.path-card__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.path-card__next { font-size: 14px; color: var(--accent); }
+.path-steps { list-style: none; padding: 0; margin: 0; }
+.path-step { display: flex; align-items: center; gap: 14px; padding: 12px 16px; text-decoration: none; color: var(--ink); }
+.path-step__number { width: 26px; text-align: center; font-weight: 700; color: var(--ink-2); flex: none; }
+.path-step__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.path-actions { margin-top: 18px; gap: 8px; }
+.path-form { padding: 18px; margin-bottom: 14px; }
+.field-label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: var(--ink-2); margin: 0; }
+.path-pick { margin: 6px 0 10px; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.path-pick li span { margin-right: 8px; }
+.path-pick li { display: list-item; }
+.path-pick .icon-link { vertical-align: middle; }
+
+.stale { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 12px; flex-wrap: wrap; border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent); }
+.stale > svg { color: var(--warning); flex: none; }
+.stale p { margin: 0; }
+
+@media (max-width: 560px) {
+  .kind-bars__row { grid-template-columns: 1fr auto; }
+  .kind-bars__row .bar { grid-column: 1 / -1; grid-row: 2; }
+  .weak__actions { width: 100%; justify-content: flex-end; }
+}
+.feedback__buttons .feedback__help { margin-top: 0; }

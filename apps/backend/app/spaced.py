@@ -3,7 +3,8 @@
 Each answered question gets a card in a box (the Leitner system the starter
 course teaches). Get it right and it moves up a box and comes back later;
 get it wrong (or half right) and it drops to box 0 and comes back tomorrow.
-The daily review is the cards that are due, up to 10 at a time.
+The daily review is the cards that are due, up to 10 at a time. When more
+are due than fit, cards from your weak spots (app/insights.py) go first.
 """
 
 from __future__ import annotations
@@ -44,11 +45,16 @@ def record(store: Store, lesson: dict[str, Any], qid: str, verdict: str, today: 
 
 
 def due_cards(store: Store, today: str | None = None, limit: int | None = REVIEW_SIZE) -> list[dict[str, Any]]:
+    from app.insights import weak_lessons
+
     today = today or local_day()
     sql = ("SELECT r.* FROM reviews r JOIN lessons l ON l.id = r.lesson_id JOIN courses c ON c.id = r.course_id"
            " WHERE r.due <= ? AND l.status = 'ready' AND c.archived = 0 ORDER BY r.due, r.box, r.updated_at")
-    cards = store.all(sql + (" LIMIT ?" if limit else ""), *([today, limit] if limit else [today]))
-    return cards
+    cards = store.all(sql, today)
+    if limit is None or len(cards) <= limit:
+        return cards
+    weak = weak_lessons(store)
+    return sorted(cards, key=lambda c: c["lesson_id"] not in weak)[:limit]  # stable: weak first, then oldest due
 
 
 def status(store: Store, today: str | None = None) -> dict[str, Any]:

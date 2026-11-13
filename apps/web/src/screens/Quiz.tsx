@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowRight, Award, Brain, Check, CircleCheck, CircleX, Flame, HelpCircle, PartyPopper, RotateCcw, Snowflake, Sparkles, X, Zap } from "lucide-react";
+import { ArrowRight, Award, Brain, Check, CircleCheck, CircleX, Eye, Flame, HelpCircle, PartyPopper, RotateCcw, Snowflake, Sparkles, X, Zap } from "lucide-react";
 import { api, post } from "../api/client";
 import type { AnswerResult, LessonDetail, Question, QuizKind, QuizResult, StartedQuiz } from "../api/types";
 import { AskSheet } from "../components/AskSheet";
 import { Diagram } from "../components/Diagram";
 import { Glass } from "../components/Glass";
 import { iconFor } from "../components/icons";
+import { Markdown } from "../components/Markdown";
 import { Loading } from "../components/PageHead";
 import { Ring } from "../components/Ring";
 
@@ -30,6 +31,16 @@ export function Quiz() {
 /** The daily review: /review */
 export function Review() {
   return <QuizRunner kind="review" startUrl="/api/review" exitTo="/" />;
+}
+
+/** Drill a weak spot: /lesson/:id/practice */
+export function Practice() {
+  const { id } = useParams();
+  const [lesson, setLesson] = useState<LessonDetail | null>(null);
+  useEffect(() => {
+    api<LessonDetail>(`/api/lessons/${id}`).then(setLesson).catch(() => undefined);
+  }, [id]);
+  return <QuizRunner key={id} kind="practice" startUrl={`/api/lessons/${id}/practice`} exitTo="/insights" lesson={lesson} />;
 }
 
 /** A course's final exam: /course/:id/exam */
@@ -72,7 +83,9 @@ export function QuizRunner({ kind, startUrl, exitTo, lesson, courseId }: {
 
   async function finish() {
     try {
-      setFinished(await post<QuizResult>(`/api/attempts/${started!.attempt_id}/finish`));
+      const done = await post<QuizResult>(`/api/attempts/${started!.attempt_id}/finish`);
+      if (done.answers) setResults((all) => ({ ...all, ...done.answers }));
+      setFinished(done);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't finish.");
     }
@@ -94,6 +107,7 @@ export function QuizRunner({ kind, startUrl, exitTo, lesson, courseId }: {
         <p className="quiz__intro muted">
           {kind === "review" ? "Daily review: questions you've answered before, back at growing intervals." :
             kind === "exam" ? "Final exam: questions from every lesson. Score 80% to earn the certificate." :
+            kind === "practice" ? `Practice${lesson ? `: ${lesson.title}` : ""}. The questions you've missed come first. Score 70% to keep your streak.` :
               started.fresh === false ? "Some of these you've seen before (options shuffled). New questions are on their way for next time." : null}
         </p>
       )}
@@ -112,16 +126,20 @@ function QuestionCard({ kind, question, attemptId, result, onResult, onNext, las
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const nextRef = useRef<HTMLButtonElement>(null);
+  const inputRef = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
+  const marked = retrying ? undefined : result; // what's on screen: nothing while trying again
   const ready = question.kind === "mcq" ? choice !== null : text.trim().length > 0;
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
-    if (!ready || busy || result) return;
+    if (!ready || busy || marked) return;
     setBusy(true);
     setError(null);
     try {
       onResult(await post<AnswerResult>(`/api/attempts/${attemptId}/answer`, question.kind === "mcq" ? { question_id: question.id, choice } : { question_id: question.id, text }));
+      setRetrying(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't mark that answer.");
     } finally {
@@ -129,9 +147,28 @@ function QuestionCard({ kind, question, attemptId, result, onResult, onNext, las
     }
   }
 
+  async function showAnswer() {
+    try {
+      onResult(await post<AnswerResult>(`/api/attempts/${attemptId}/reveal`, { question_id: question.id }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't show the answer.");
+    }
+  }
+
+  async function next() {
+    if (marked?.hidden) await showAnswer(); // moving on gives up the second try
+    onNext();
+  }
+
+  function tryAgain() {
+    setText("");
+    setRetrying(true);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
   useEffect(() => {
-    if (result) nextRef.current?.focus();
-  }, [result]);
+    if (marked) nextRef.current?.focus();
+  }, [marked]);
 
   useEffect(() => {
     if (question.kind !== "mcq" || result) return;
@@ -144,14 +181,15 @@ function QuestionCard({ kind, question, attemptId, result, onResult, onNext, las
     return () => window.removeEventListener("keydown", onKey);
   }, [question, result]);
 
-  const verdict = result ? VERDICT[result.verdict] : null;
-  const askPrompt = result && question.kind === "mcq"
-    ? `I answered "${question.options![result.choice!]}" to "${question.prompt}", but the answer is "${question.options![result.answer_index!]}". Can you help me understand why?`
-    : result ? `For "${question.prompt}" I wrote: "${result.text}". What did I miss?` : "";
+  const verdict = marked ? VERDICT[marked.verdict] : null;
+  const askPrompt = !marked ? "" : question.kind === "mcq"
+    ? `I answered "${question.options![marked.choice!]}" to "${question.prompt}", but the answer is "${question.options![marked.answer_index!]}". Can you help me understand why?`
+    : question.kind === "calc" ? `For "${question.prompt}" I got ${marked.text}, but the answer is ${marked.answer_value} ${marked.unit ?? ""}. Can you walk me through the working?`
+      : `For "${question.prompt}" I wrote: "${marked.text}". What did I miss?`;
   return (
     <Glass as="form" className="question" onSubmit={submit}>
       <span className="question__kind">
-        {question.kind === "mcq" ? "Multiple choice" : "Written answer"}{question.svg ? " · picture" : ""}
+        {KIND_LABEL[question.kind]}{question.svg ? " · picture" : ""}{retrying ? " · second try" : ""}
         {kind !== "lesson" && question.lesson_title ? <span className="question__from"> · {question.lesson_title}</span> : null}
       </span>
       {question.svg && <Diagram svg={question.svg} alt={question.image_alt || "Picture for this question"} />}
@@ -160,10 +198,10 @@ function QuestionCard({ kind, question, attemptId, result, onResult, onNext, las
       {question.kind === "mcq" ? (
         <div className="options" role="radiogroup" aria-label="Answers">
           {question.options!.map((option, i) => {
-            const state = !result ? (choice === i ? "picked" : "") :
-              i === result.answer_index ? "right" : i === result.choice ? "wrong" : "dim";
+            const state = !marked ? (choice === i ? "picked" : "") :
+              i === marked.answer_index ? "right" : i === marked.choice ? "wrong" : "dim";
             return (
-              <button key={i} type="button" role="radio" aria-checked={choice === i} disabled={!!result}
+              <button key={i} type="button" role="radio" aria-checked={choice === i} disabled={!!marked}
                 className={`option ${state ? `option--${state}` : ""}`} onClick={() => setChoice(i)}>
                 <span className="option__letter">{state === "right" ? <Check size={15} /> : state === "wrong" ? <X size={15} /> : LETTERS[i]}</span>
                 <span>{option}</span>
@@ -171,43 +209,84 @@ function QuestionCard({ kind, question, attemptId, result, onResult, onNext, las
             );
           })}
         </div>
+      ) : question.kind === "calc" ? (
+        <div className="calc-answer">
+          <input ref={inputRef} className="field calc-answer__input" inputMode="decimal" autoComplete="off" placeholder="Your answer"
+            value={marked?.text ?? text} onChange={(e) => setText(e.target.value)} readOnly={!!marked} maxLength={100} aria-label={`Your answer${question.unit ? ` in ${question.unit}` : ""}`} />
+          {question.unit && <span className="calc-answer__unit">{question.unit}</span>}
+        </div>
       ) : (
-        <textarea className="field answer-box" rows={4} placeholder="Type your answer in a sentence or two…" value={result?.text ?? text}
-          onChange={(e) => setText(e.target.value)} readOnly={!!result} maxLength={4000} aria-label="Your answer"
+        <textarea ref={inputRef} className="field answer-box" rows={question.kind === "scenario" ? 6 : 4}
+          placeholder={question.kind === "scenario" ? "What would you do, check or recommend, and why?" : "Type your answer in a sentence or two…"}
+          value={marked?.text ?? text} onChange={(e) => setText(e.target.value)} readOnly={!!marked} maxLength={4000} aria-label="Your answer"
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submit(); }} />
       )}
+      {retrying && result?.text && <p className="muted question__first">First try: “{result.text}”</p>}
 
       {error && <div className="error-banner" role="alert">{error}</div>}
 
-      {result && verdict && (
+      {marked && verdict && (
         <div className={`feedback feedback--${verdict.tone}`} role="status">
-          <p className="feedback__verdict"><verdict.Icon aria-hidden="true" /> {verdict.label}{result.xp > 0 && <span className="feedback__xp">+{result.xp} XP</span>}</p>
-          {result.feedback && <p>{result.feedback}</p>}
-          {result.kind === "open" && result.model_answer && (
-            <p className="feedback__model"><strong>A strong answer:</strong> {result.model_answer}</p>
+          <p className="feedback__verdict">
+            <verdict.Icon aria-hidden="true" /> {verdict.label}{marked.second_try ? " on the second try" : ""}
+            {marked.xp > 0 && <span className="feedback__xp">+{marked.xp} XP</span>}
+          </p>
+          {marked.feedback && <p>{marked.feedback}</p>}
+          {marked.points && marked.points.length > 0 && (
+            <ul className="points" aria-label="Key points">
+              {marked.points.map((p) => (
+                <li key={p.point} className={p.met ? "points__met" : "points__missed"}>
+                  {p.met ? <Check size={15} aria-label="Covered" /> : <X size={15} aria-label="Missing" />} {p.point}
+                </li>
+              ))}
+            </ul>
           )}
-          {result.explanation && <p className="muted">{result.explanation}</p>}
-          {result.review && <p className="feedback__next muted">{result.verdict === "correct" ? `Back for review in ${days(result.review.due)}.` : "This one comes back in tomorrow's review."}</p>}
-          {result.verdict !== "correct" && (
-            <button type="button" className="chip chip--button feedback__help" onClick={() => setAsking(true)}><HelpCircle size={14} aria-hidden="true" /> Help me understand</button>
+          {marked.kind === "calc" && marked.answer_value !== undefined && (
+            <>
+              <p className="feedback__model"><strong>Answer:</strong> {formatNumber(marked.answer_value)}{marked.unit ? ` ${marked.unit}` : ""} <span className="muted">(right within {marked.tolerance}%)</span></p>
+              {marked.working && <div className="working"><p className="working__title">Working</p><Markdown text={marked.working} /></div>}
+            </>
+          )}
+          {(marked.kind === "open" || marked.kind === "scenario") && marked.model_answer && (
+            <p className="feedback__model"><strong>A strong answer:</strong> {marked.model_answer}</p>
+          )}
+          {marked.explanation && <p className="muted">{marked.explanation}</p>}
+          {marked.review && !marked.second_try && <p className="feedback__next muted">{marked.verdict === "correct" ? `Back for review in ${days(marked.review.due)}.` : "This one comes back in tomorrow's review."}</p>}
+          {marked.verdict !== "correct" && (
+            <div className="feedback__buttons">
+              {marked.can_retry && <button type="button" className="chip chip--button" onClick={tryAgain}><RotateCcw size={14} aria-hidden="true" /> Try again (half marks)</button>}
+              {marked.hidden ? (
+                <button type="button" className="chip chip--button" onClick={() => void showAnswer()}><Eye size={14} aria-hidden="true" /> Show answer</button>
+              ) : (
+                <button type="button" className="chip chip--button feedback__help" onClick={() => setAsking(true)}><HelpCircle size={14} aria-hidden="true" /> Help me understand</button>
+              )}
+            </div>
           )}
         </div>
       )}
 
       <div className="question__actions">
-        {!result ? (
+        {!marked ? (
           <Glass as="button" type="submit" variant="tint" shape="pill" interactive className="button" disabled={!ready || busy}>
-            {busy ? (question.kind === "open" ? "Marking…" : "Checking…") : "Check answer"}
+            {busy ? (question.kind === "open" || question.kind === "scenario" ? "Marking…" : "Checking…") : "Check answer"}
           </Glass>
         ) : (
-          <Glass as="button" type="button" ref={nextRef} variant="tint" shape="pill" interactive className="button" onClick={onNext}>
+          <Glass as="button" type="button" ref={nextRef} variant="tint" shape="pill" interactive className="button" onClick={() => void next()}>
             {last ? "See results" : "Next question"} <ArrowRight aria-hidden="true" />
           </Glass>
         )}
       </div>
-      {asking && result && <AskSheet lessonId={result.lesson_id} lessonTitle={result.lesson_title} initial={askPrompt} onClose={() => setAsking(false)} />}
+      {asking && marked && <AskSheet lessonId={marked.lesson_id} lessonTitle={marked.lesson_title} initial={askPrompt} onClose={() => setAsking(false)} />}
     </Glass>
   );
+}
+
+const KIND_LABEL: Record<Question["kind"], string> = {
+  mcq: "Multiple choice", open: "Written answer", scenario: "Scenario", calc: "Calculation",
+};
+
+function formatNumber(n: number): string {
+  return Number.isInteger(n) ? n.toLocaleString() : n.toLocaleString(undefined, { maximumSignificantDigits: 4 });
 }
 
 function days(due: string): string {
@@ -222,10 +301,11 @@ function Results({ result, lesson, courseId, results, questions, onRetake, exitT
   const [review, setReview] = useState(false);
   const pct = Math.round(result.score * 100);
   const answeredXp = Object.values(results).reduce((n, r) => n + r.xp, 0);
-  const title = result.kind === "review" ? "Review done" :
+  const title = result.kind === "review" ? "Review done" : result.kind === "practice" ? (result.passed ? "Practice done" : "Keep practising") :
     result.kind === "exam" ? (result.passed ? "Exam passed!" : "Not this time") :
       result.course_completed ? "Course complete!" : result.score === 1 ? "Perfect score!" : result.passed ? "Lesson passed" : "Keep going";
   const subtitle = result.kind === "review" ? "Cards you got right come back later; the rest come back tomorrow." :
+    result.kind === "practice" ? (result.passed ? "Nice. Your weak spots update as you answer." : "Re-read the lesson, then practise again.") :
     result.kind === "exam" ? (result.passed ? "You've earned the certificate for this course." : "You need 80% to pass. Review the lessons and try again.") :
       result.passed ? lesson?.title ?? "" : "You need 70% to pass. Re-read the lesson and try again.";
   return (
@@ -272,9 +352,10 @@ function Results({ result, lesson, courseId, results, questions, onRetake, exitT
           {result.kind === "exam" && result.certificate && courseId && (
             <Glass as={Link} to={`/certificate/${courseId}`} variant="tint" shape="pill" interactive className="button"><Award aria-hidden="true" /> Certificate</Glass>
           )}
-          {result.kind !== "review" && <Glass as="button" type="button" shape="pill" interactive className="button" onClick={onRetake}><RotateCcw aria-hidden="true" /> {result.kind === "exam" ? "Try again" : "Retake"}</Glass>}
+          {result.kind !== "review" && <Glass as="button" type="button" shape="pill" interactive className="button" onClick={onRetake}><RotateCcw aria-hidden="true" /> {result.kind === "exam" ? "Try again" : result.kind === "practice" ? "Practise again" : "Retake"}</Glass>}
+          {result.kind === "practice" && lesson && <Glass as={Link} to={`/lesson/${lesson.id}`} shape="pill" interactive className="button">Re-read the lesson</Glass>}
           <Glass as={Link} to={result.kind === "lesson" && lesson ? `/course/${lesson.course.id}` : exitTo} shape="pill" interactive className="button">
-            {result.kind === "review" ? "Done" : "Course"}
+            {result.kind === "review" ? "Done" : result.kind === "practice" ? "Weak spots" : "Course"}
           </Glass>
         </div>
       </Glass>
@@ -293,6 +374,8 @@ function Results({ result, lesson, courseId, results, questions, onRetake, exitT
                 <p className="review__prompt">{q.prompt}</p>
                 {q.kind === "mcq" && r ? (
                   <p className="muted">You chose <b>{q.options![r.choice!]}</b>{r.verdict !== "correct" && <> · answer: <b>{q.options![r.answer_index!]}</b></>}</p>
+                ) : q.kind === "calc" && r ? (
+                  <p className="muted">You answered <b>{r.text}</b>{r.verdict !== "correct" && r.answer_value !== undefined && <> · answer: <b>{formatNumber(r.answer_value)} {r.unit}</b></>}</p>
                 ) : r ? (
                   <><p className="muted">You wrote: “{r.text}”</p>{r.feedback && <p className="muted">{r.feedback}</p>}</>
                 ) : null}

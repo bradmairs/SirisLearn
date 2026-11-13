@@ -2,11 +2,14 @@
 the history page, the achievements and the SirisOS widget.
 
 - **XP** comes from quizzes: 10 per right multiple-choice answer, 15 per
-  right open answer (7 for a partly right one), +20 the first time a lesson
-  is passed (70%+), +15 for a perfect 10/10, +100 for finishing a course.
+  right written or calculation answer (7 for a partly right one), 20 per
+  right scenario (10 partly), half that on a second try, +20 the first time
+  a lesson is passed (70%+), +15 for a perfect 10/10, +100 for finishing a
+  course.
 - **Level** n needs 50 * n * (n - 1) XP: 100 for level 2, 300 for 3, 600 for 4...
 - **Streak**: consecutive days (in SIRISLEARN_TIMEZONE) with a passed lesson
-  quiz (70%+), a finished daily review or a passed final exam. A failed quiz
+  quiz (70%+), a finished daily review, a passed practice round or a passed
+  final exam. A failed quiz
   doesn't count. Until today's is done, yesterday's streak still counts but
   is "at risk".
 - **Streak freezes**: one is earned every 7 days of a streak (hold up to 2).
@@ -26,6 +29,8 @@ from app.db import Store, local_day
 XP_MCQ = 10
 XP_OPEN = 15
 XP_OPEN_PARTIAL = 7
+XP_SCENARIO = 20
+XP_SCENARIO_PARTIAL = 10
 XP_PASS = 20
 XP_PERFECT = 15
 XP_COURSE = 100
@@ -61,6 +66,8 @@ def qualifies(event: dict[str, Any]) -> bool:
         return True
     if event["kind"] == "exam_finished":
         return bool(detail.get("passed"))
+    if event["kind"] == "practice_finished":
+        return bool(detail.get("passed"))
     if event["kind"] == "quiz_finished":
         if "passed" in detail:
             return bool(detail["passed"])
@@ -70,7 +77,7 @@ def qualifies(event: dict[str, Any]) -> bool:
 
 
 def active_days(store: Store) -> list[str]:
-    events = store.all("SELECT kind, day, detail FROM events WHERE kind IN ('quiz_finished', 'review_finished', 'exam_finished')")
+    events = store.all("SELECT kind, day, detail FROM events WHERE kind IN ('quiz_finished', 'review_finished', 'exam_finished', 'practice_finished')")
     return sorted({e["day"] for e in events if qualifies(e)})
 
 
@@ -166,7 +173,7 @@ def continue_learning(store: Store) -> dict[str, Any] | None:
 
 def summary(store: Store) -> dict[str, Any]:
     """Home screen and SirisOS widget numbers."""
-    from app import spaced
+    from app import insights, paths, spaced
     from app.achievements import catalogue
 
     today = local_day()
@@ -194,6 +201,8 @@ def summary(store: Store) -> dict[str, Any]:
         "activity": {"quizzes": today_events["quiz_finished"], "lessons_passed": today_events["lesson_passed"]},
         "continue": continue_learning(store),
         "review": spaced.status(store, today),
+        "path": paths.active(store),
+        "weak_spot": next(iter(insights.report(store)["weak"]), None),
         "achievements": {
             "unlocked": len(unlocked), "total": len(names),
             "recent": [{"id": k, "title": names[k]["title"], "icon": names[k]["icon"], "unlocked_at": v} for k, v in recent if k in names],

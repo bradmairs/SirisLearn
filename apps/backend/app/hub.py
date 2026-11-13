@@ -6,7 +6,9 @@ this app ("/lesson/abc"); SirisOS puts SIRISLEARN_PUBLIC_URL in front.
 - /status: up, version, and whether a model is set up.
 - /summary: the widget numbers (streak, XP against the daily goal, level,
   courses) and what to do next. `streak.at_risk` drives the SirisOS inbox
-  item "your streak ends at midnight".
+  item "your streak ends at midnight". `paths` (1.4) lists unfinished
+  learning paths with percent, status (on_track, behind, overdue, no_date)
+  and the next step; a "behind" path is a SirisOS inbox item.
 - /search: courses and lessons by title, topic and summary.
 """
 
@@ -16,7 +18,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
-from app import llm, progress
+from app import llm, paths, progress
 from app.auth import require_hub_key
 from app.db import get_store
 from app.version import VERSION
@@ -34,6 +36,9 @@ def summary() -> dict[str, Any]:
     data = progress.summary(get_store())
     nxt = data["continue"]
     data["continue"] = nxt and {**nxt, "url": f"/lesson/{nxt['lesson_id']}"}
+    data.pop("path", None)
+    data.pop("weak_spot", None)
+    data["paths"] = paths.hub_view(get_store())
     recent = get_store().events(kinds=["quiz_finished", "course_completed", "achievement"], limit=5)
     data["recent"] = [
         {"kind": e["kind"], "title": e["title"], "course_title": e["course_title"], "xp": e["xp"], "ts": e["ts"],

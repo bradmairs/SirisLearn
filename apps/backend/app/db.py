@@ -111,6 +111,16 @@ CREATE TABLE IF NOT EXISTS usage (
     cache_write_tokens INTEGER NOT NULL DEFAULT 0,
     cost REAL NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS paths (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    course_ids TEXT NOT NULL DEFAULT '[]',
+    target_date TEXT,
+    pack TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS push_subscriptions (
     endpoint TEXT PRIMARY KEY,
     subscription TEXT NOT NULL,
@@ -130,7 +140,7 @@ MIGRATIONS = [
     ("lessons", "brain_saved_at", "TEXT"),
 ]
 
-JSON_FIELDS = {"sections", "content", "answers", "detail", "items", "tags", "subscription"}
+JSON_FIELDS = {"sections", "content", "answers", "detail", "items", "tags", "subscription", "course_ids"}
 
 
 def now_iso() -> str:

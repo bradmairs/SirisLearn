@@ -7,7 +7,9 @@ import { CourseIcon, iconFor } from "../components/icons";
 import { NewCourse } from "../components/NewCourse";
 import { Loading, PageHead } from "../components/PageHead";
 import { Ring } from "../components/Ring";
+import { WeakSpotCard } from "./Insights";
 import { CourseTile } from "./Library";
+import { PathCard } from "./Paths";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -52,6 +54,8 @@ export function Today({ user }: { user: string }) {
           </div>
 
           <ReviewCard review={s.review} />
+          {s.path && <PathCard path={s.path} compact />}
+          {s.weak_spot && <WeakSpotCard spot={s.weak_spot} compact />}
 
           {s.continue && (
             <Glass as={Link} to={`/lesson/${s.continue.lesson_id}`} interactive className="continue">

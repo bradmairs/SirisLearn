@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import time
 from typing import Any, Callable
 
@@ -22,12 +23,16 @@ def truth(store, question_ref: str) -> dict[str, Any]:
 def right_answer(store, attempt_id: str, q: dict[str, Any]) -> dict[str, Any]:
     """An answer body that's correct, honouring the attempt's option order."""
     t = truth(store, q["id"])
+    if q["kind"] == "calc":
+        return {"question_id": q["id"], "text": f"{t['answer_value']} {t.get('unit', '')}"}
     if q["kind"] != "mcq":
         return {"question_id": q["id"], "text": t["model_answer"]}
     return {"question_id": q["id"], "choice": q["options"].index(t["options"][t["answer_index"]])}
 
 
 def wrong_answer(store, attempt_id: str, q: dict[str, Any]) -> dict[str, Any]:
+    if q["kind"] == "calc":
+        return {"question_id": q["id"], "text": "-123456"}
     if q["kind"] != "mcq":
         return {"question_id": q["id"], "text": "no idea"}
     t = truth(store, q["id"])
@@ -45,6 +50,7 @@ class FakeLLM:
         self.calls: list[dict[str, Any]] = []
         self.fail_lessons = False
         self.verdict = "correct"
+        self.time_sensitive = False
 
     async def json(self, *, system, context, prompt, schema, effort="medium", max_tokens=32000, meta=None):
         self.calls.append({"system": system, "context": context, "prompt": prompt, "effort": effort, "meta": meta or {}})
@@ -69,9 +75,11 @@ class FakeLLM:
             if self.fail_lessons:
                 return {"title": "x", "minutes": 5, "body": "too short", "key_points": [], "figure_svg": "", "figure_caption": "", "questions": []}
             lesson = copy.deepcopy(LESSON_1)
+            lesson["time_sensitive"] = self.time_sensitive
             lesson["figure_svg"] = '<svg viewBox="0 0 10 10"><script>alert(1)</script><rect onclick="x()" width="5" height="5"/></svg>'
             return lesson
-        return {"verdict": self.verdict, "feedback": "Nice."}
+        points = json.loads(prompt).get("key_points") or []
+        return {"verdict": self.verdict, "met": [i == 0 or self.verdict == "correct" for i in range(len(points))], "feedback": "Nice."}
 
 
 @pytest.fixture()
@@ -90,6 +98,7 @@ def store(tmp_path, monkeypatch):
     monkeypatch.setenv("SIRISLEARN_JOBS", "false")
     monkeypatch.setenv("SIRISLEARN_PHOTOS", "false")
     monkeypatch.setenv("SIRISLEARN_SEED_PACKS", "false")
+    monkeypatch.setenv("SIRISLEARN_AI_UPDATES", "false")
     return db.reset_store(tmp_path / "test.db")
 
 

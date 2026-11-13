@@ -6,7 +6,11 @@
 2. A lesson is written when it's first opened, and the one after it is
    written ahead so it's ready when you get there (SIRISLEARN_PREGENERATE=all
    writes the whole course straight after planning instead).
-3. Model output is checked before it's stored: a lesson keeps only
+3. A time-sensitive lesson (regulations, products, fast-moving fields) can be
+   refreshed once it's older than SIRISLEARN_REFRESH_DAYS (default 180): the
+   writer gets the old version and, for AI courses, recent AI news, and
+   rewrites it. Its review cards start over because the questions change.
+4. Model output is checked before it's stored: a lesson keeps only
    well-formed questions, its diagrams are sanitised, and it needs at least
    six good questions or it fails and can be retried.
 
@@ -19,7 +23,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from app import config, photos, prompts, svg
@@ -175,16 +181,36 @@ def retry_course(course_id: str) -> None:
 # -- lessons ---------------------------------------------------------------------
 
 
-def ensure_lesson(lesson_id: str, regenerate: bool = False) -> None:
-    """Start writing a lesson if it isn't written (or being written) yet."""
+def ensure_lesson(lesson_id: str, regenerate: bool = False, refresh: bool = False) -> None:
+    """Start writing a lesson if it isn't written (or being written) yet.
+    `refresh` rewrites a written lesson from its old version."""
     store = get_store()
     lesson = store.lesson(lesson_id)
-    if lesson is None or (lesson["status"] in ("ready", "writing") and not regenerate):
+    if lesson is None or (lesson["status"] in ("ready", "writing") and not (regenerate or refresh)):
         return
     if f"lesson:{lesson_id}" in _tasks:
         return
+    previous = lesson if refresh and lesson["status"] == "ready" and lesson.get("content") else None
     store.update("lessons", lesson_id, status="writing", error="")
-    _spawn(f"lesson:{lesson_id}", lambda: _write(lesson_id))
+    _spawn(f"lesson:{lesson_id}", lambda: _write(lesson_id, previous))
+
+
+def refresh_days() -> int:
+    return max(1, int(config.env("SIRISLEARN_REFRESH_DAYS", "180")))
+
+
+def stale(lesson: dict[str, Any], now: datetime | None = None) -> dict[str, Any] | None:
+    """When a time-sensitive lesson is due a refresh: its age, else None."""
+    content = lesson.get("content") or {}
+    if lesson.get("status") != "ready" or not content.get("time_sensitive") or not lesson.get("generated_at"):
+        return None
+    age = ((now or datetime.now(timezone.utc)) - datetime.fromisoformat(lesson["generated_at"])).days
+    return {"written": lesson["generated_at"], "days": age} if age >= refresh_days() else None
+
+
+def is_ai_course(course: dict[str, Any]) -> bool:
+    tags = set(course.get("tags") or [])
+    return bool(tags & {"ai", "artificial-intelligence", "llms", "machine-learning", "generative-ai"}) or (course.get("pack") or "").startswith("ai-")
 
 
 def prefetch_after(lesson: dict[str, Any]) -> None:
@@ -196,7 +222,9 @@ def prefetch_after(lesson: dict[str, Any]) -> None:
         ensure_lesson(following["id"])
 
 
-async def _write(lesson_id: str) -> None:
+async def _write(lesson_id: str, previous: dict[str, Any] | None = None) -> None:
+    from app import news
+
     store = get_store()
     lesson = store.lesson(lesson_id)
     course = store.course(lesson["course_id"]) if lesson else None
@@ -209,27 +237,44 @@ async def _write(lesson_id: str) -> None:
         sections = _plan_with_lessons(store, course)
         section = sections[lesson["section_idx"]]
         lesson_number = next(i for i, l in enumerate(section["lessons"], 1) if l["id"] == lesson_id)
+        if previous:
+            items = await news.recent(days=refresh_days()) if is_ai_course(course) else []
+            prompt = prompts.refresh_prompt(lesson["section_idx"] + 1, lesson_number, section["title"], previous,
+                                            previous.get("generated_at") or "", news.as_prompt(items[:25]) if items else "")
+        else:
+            prompt = prompts.lesson_prompt(lesson["section_idx"] + 1, lesson_number, section["title"], lesson["title"], lesson["summary"])
         async with _limit():
             raw = await llm.json(
                 system=prompts.WRITER_SYSTEM,
                 context=prompts.course_context(course, sections),
-                prompt=prompts.lesson_prompt(lesson["section_idx"] + 1, lesson_number, section["title"], lesson["title"], lesson["summary"]),
+                prompt=prompt,
                 schema=prompts.LESSON_SCHEMA, effort=config.env("SIRISLEARN_EFFORT", "medium"), max_tokens=64000,
-                meta={"purpose": "lesson", "course_id": course["id"], "lesson_id": lesson_id},
+                meta={"purpose": "refresh" if previous else "lesson", "course_id": course["id"], "lesson_id": lesson_id},
             )
         content = clean_lesson(raw)
+        if previous:
+            content["refreshed_at"] = now_iso()
         if content.get("photo_query"):
             content["photo"] = await photos.find(content["photo_query"])
     except LLMError as exc:
-        store.update("lessons", lesson_id, status="error", error=str(exc))
+        if previous:  # keep the old version readable
+            store.update("lessons", lesson_id, status="ready", error=f"Refreshing failed: {exc}")
+        else:
+            store.update("lessons", lesson_id, status="error", error=str(exc))
         return
     except Exception:
         logger.exception("Writing lesson %s failed", lesson_id)
-        store.update("lessons", lesson_id, status="error", error="Something went wrong writing this lesson. Retry.")
+        if previous:
+            store.update("lessons", lesson_id, status="ready", error="Refreshing failed. Try again later.")
+        else:
+            store.update("lessons", lesson_id, status="error", error="Something went wrong writing this lesson. Retry.")
         return
     if store.lesson(lesson_id) is None:
         return
     store.update("lessons", lesson_id, status="ready", error="", content=content, generated_at=now_iso())
+    if previous:
+        store.run("DELETE FROM reviews WHERE lesson_id = ?", lesson_id)  # its questions are new
+        store.log("lesson_refreshed", title=lesson["title"], course=course, lesson_id=lesson_id)
 
 
 def _plan_with_lessons(store: Store, course: dict[str, Any]) -> list[dict[str, Any]]:
@@ -255,6 +300,7 @@ def clean_lesson(raw: dict[str, Any], max_questions: int | None = prompts.QUESTI
         "figure_caption": str(raw.get("figure_caption") or "").strip() if figure else "",
         "questions": questions,
         "photo_query": str(raw.get("photo_query") or "").strip()[:80],
+        "time_sensitive": raw.get("time_sensitive") is True,
     }
     return out
 
@@ -325,7 +371,7 @@ async def _photo(lesson_id: str) -> None:
 def clean_question(q: dict[str, Any]) -> dict[str, Any] | None:
     prompt = str(q.get("prompt") or "").strip()
     kind = q.get("kind")
-    if not prompt or kind not in ("mcq", "open"):
+    if not prompt or kind not in prompts.QUESTION_KINDS:
         return None
     image = svg.sanitize(q.get("svg"))
     out: dict[str, Any] = {
@@ -342,6 +388,15 @@ def clean_question(q: dict[str, Any]) -> dict[str, Any] | None:
         if len(options) < 2 or not all(options) or not isinstance(answer, int) or not 0 <= answer < len(options):
             return None
         out.update(options=options, answer_index=answer)
+    elif kind == "calc":
+        value = q.get("answer_value")
+        working = str(q.get("working") or "").strip()
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not working:
+            return None
+        tolerance = q.get("tolerance")
+        tolerance = float(tolerance) if isinstance(tolerance, (int, float)) and not isinstance(tolerance, bool) and math.isfinite(tolerance) else 2.0
+        out.update(answer_value=float(value), tolerance=min(10.0, max(0.5, tolerance)),
+                   unit=str(q.get("unit") or "").strip()[:20], working=working)
     else:
         key_points = [str(p).strip() for p in q.get("key_points") or [] if str(p).strip()]
         model_answer = str(q.get("model_answer") or "").strip()

@@ -1,6 +1,6 @@
 """Civil and water engineering fundamentals: beginner."""
 
-from app.coursepacks import mcq, open_q
+from app.coursepacks import calc, mcq, open_q, scenario
 from app.packs._draw import AMBER, BLUE, GREEN, INK, MUTED, PURPLE, RED, arrow, box, circle, line, path, svg, text, title
 
 CYCLE = svg(
@@ -78,6 +78,7 @@ STORM = svg(
 L1 = {
     "title": "The urban water cycle and who runs it",
     "minutes": 8,
+    "time_sensitive": True,
     "photo_query": "water treatment plant clarifier",
     "body": """Turning on a tap and flushing a toilet rely on one of the largest pieces of infrastructure most people never see. Civil and water engineers plan, design, build, operate and renew it.
 
@@ -217,6 +218,10 @@ Find the top water level of the reservoir supplying a street and the street's gr
                ["divide by 9.81", "about 36 m"], "Or roughly 350 / 10 = 35 m as a quick check."),
         open_q("Name the three parts of total head in Bernoulli's equation.", "Elevation head (height z above a datum), pressure head (p/ρg) and velocity head (V²/2g).",
                ["elevation head", "pressure head", "velocity head"], "Velocity head is usually small in water mains."),
+        calc("A town's service reservoir has its water level 52 m above a house's tap. Ignoring flow, what is the static pressure at the tap, in kPa?", 510, "kPa",
+             "1. Every metre of water adds ρg ≈ 9.81 kPa.\n2. p = 52 m × 9.81 kPa/m = 510.1 kPa.", "Static head converts to pressure at about 9.81 kPa per metre.", tolerance=2),
+        calc("Water flows at 1.2 m/s in a pipe with an internal diameter of 100 mm. What is the flow rate, in L/s?", 9.42, "L/s",
+             "1. A = π × 0.1² / 4 = 0.007854 m².\n2. Q = V × A = 1.2 × 0.007854 = 0.009425 m³/s.\n3. × 1000 = 9.42 L/s.", "Q = V × A, then convert m³/s to L/s.", tolerance=2),
     ],
 }
 
@@ -519,7 +524,7 @@ Estimate the runoff from your own roof with the rational method (C about 0.9, ar
 
 PACK = {
     "id": "water-beginner",
-    "version": 1,
+    "version": 2,
     "topic": "Civil and water engineering",
     "title": "Water and civil engineering fundamentals",
     "summary": "How towns get safe water and get rid of wastewater and stormwater: the urban water cycle, pressure and flow, pipes, distribution networks, sewers and drainage, in a Victorian and Australian context. For beginners.",
