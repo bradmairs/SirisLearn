@@ -164,6 +164,7 @@ function LessonRow({ lesson, number, next }: { lesson: LessonSummary; number: nu
         {lesson.status === "writing" && <><LoaderCircle className="spin" size={14} aria-hidden="true" /> Writing</>}
         {lesson.status === "error" && <CircleAlert size={16} className="tone-critical" aria-label="Couldn't be written" />}
         {lesson.best_score !== null && <span className={passed ? "tone-good" : "tone-warning"}>{Math.round(lesson.best_score * 100)}%</span>}
+        {lesson.stale && <span className="chip chip--tiny tone-warning" title="Written a while ago and covers things that change quickly">May be dated</span>}
         {next && !passed && <span className="chip chip--tiny">Up next</span>}
       </span>
       <ChevronRight size={18} className="lesson-row__go" aria-hidden="true" />

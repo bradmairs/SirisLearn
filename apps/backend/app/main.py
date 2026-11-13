@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import api, config, coursepacks, generator, hub, jobs, sample
+from app import api, config, coursepacks, generator, hub, jobs, paths, sample
 from app.auth import CurrentUser, check_password, create_token
 from app.db import get_store
 from app.version import VERSION
@@ -29,6 +29,7 @@ async def lifespan(_: FastAPI):
     generator.recover(store)
     sample.seed(store)
     coursepacks.seed(store)
+    paths.seed(store)
     runner = None
     if config.env("SIRISLEARN_JOBS", "true").lower() not in ("0", "false", "no"):
         runner = asyncio.create_task(jobs.run_forever())

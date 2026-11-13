@@ -1,6 +1,6 @@
 """Civil and water engineering at expert level."""
 
-from app.coursepacks import mcq, open_q
+from app.coursepacks import calc, mcq, open_q, scenario
 from app.packs._draw import AMBER, BLUE, GREEN, INK, MUTED, PURPLE, RED, arrow, box, circle, line, path, svg, text, title
 
 HAMMER = svg(
@@ -152,6 +152,10 @@ Transient analysis uses the **method of characteristics** in software (for examp
                ["most flow change near end of travel", "closing faster than 2L/a causes full surge", "slow closure reduces surge"], "Actuator timing is a design parameter."),
         open_q("What scenarios would you run in a transient analysis of a rising main?", "A power failure pump trip at maximum flow and minimum static head, normal start-up and shut-down, valve closures, and failure cases for the protection such as a surge vessel with low air volume or an air valve not working, checking maximum and minimum pressures along the profile.",
                ["pump trip", "start-up and valve closure", "failure of protection", "check max and min pressure envelopes"], "Worst cases aren't always obvious."),
+        calc("A DICL rising main has a wave speed of about 1100 m/s. Flow at 1.8 m/s stops suddenly when the pumps trip. Using Joukowsky, roughly what pressure head change results, in metres?", 202, "m",
+             "1. ΔH = a × ΔV / g.\n2. ΔH = 1100 × 1.8 / 9.81 = 201.8 m.", "On top of the operating pressure, this can far exceed the pipe rating.", tolerance=3),
+        calc("A main is 3.3 km long with a wave speed of 1100 m/s. Below what closure time, in seconds, would a valve closure give the full Joukowsky surge?", 6, "s",
+             "1. The critical time is the wave's round trip, 2L/a.\n2. 2 × 3300 / 1100 = 6 s.", "Close slower than 2L/a to reduce the surge.", tolerance=2),
     ],
 }
 
@@ -318,6 +322,12 @@ A station is an operating cost for 50+ years: energy, maintenance, odour control
                ["low flows for years", "septicity and poor pump operation", "match capacity to actual flow"], "Civil works may be built once, with mechanical items staged."),
         open_q("What design features make a pump station safe to operate?", "Pumps on guide rails that lift out from the surface, valves in a separate dry chamber, avoiding routine confined-space entry, good vehicle and crane access, level sensors with backup floats, telemetry alarms, ventilation and odour control, and security fencing.",
                ["avoid confined space entry", "pumps lift out on rails", "valve chamber", "alarms and access"], "WSA 04 covers these."),
+        calc("A sewage pump delivers 45 L/s and its motor is allowed 12 starts per hour. What is the minimum active storage between start and stop levels, in m³?", 3.38, "m³",
+             "1. Minimum cycle time T = 3600 / 12 = 300 s.\n2. Vs = T × Q / 4 = 300 × 0.045 / 4 = 3.375 m³.", "The worst case is inflow at half the pump rate.", tolerance=2),
+        scenario("At 2 am a pump station's high-level alarm comes in during heavy rain. Telemetry shows both pumps running, the wet well still rising and the overflow level about 40 minutes away at this rate. What do you do and why?",
+                 "Treat it as an imminent overflow risk: confirm the readings, mobilise the on-call crew, and check whether the pumps are actually delivering (blockage, air lock, a closed valve or reduced flow). Reduce inflow where possible, arrange vacuum tankers to draw down the well, and protect the community by managing any overflow to the designated point and notifying the EPA and the environmental team as the licence requires. Afterwards, review inflow and infiltration and capacity.",
+                 ["confirms readings and mobilises response", "checks why pumps aren't keeping up", "uses tankers or other ways to reduce the level", "manages and reports any overflow as required", "follows up on wet weather capacity"],
+                 "Wet weather plus pumps that can't keep up usually means inflow and infiltration or a pump problem."),
     ],
 }
 
@@ -407,12 +417,17 @@ A renewal program should show:
                ["scenarios of risk and service", "whole-of-life cost and NPV", "benefits beyond the asset"], "In Victoria, price submissions to the ESC rely on this."),
         open_q("Why does asset data quality matter so much?", "Risk models rely on the register; wrong materials, sizes, ages or locations give wrong likelihood and consequence scores, sending money to the wrong assets and missing real risks; recording failures accurately also improves future predictions.",
                ["models rely on the register", "wrong data misdirects spending", "record failures to improve"], "Close the data loop."),
+        scenario("Your renewal budget can fund only one of three water main projects this year: A, a DN100 cast iron main in a cul-de-sac with five breaks in two years; B, a DN450 trunk main with no breaks but supplying a hospital; C, a DN150 main installed in 1995 with one break. Which do you fund, and what else do you do?",
+                 "Use risk (likelihood × consequence) rather than age. A has high likelihood but low consequence; B has low likelihood but very high consequence; C is low risk. Fund A if its failures are costly and disruptive, but don't ignore B: commission a condition assessment and look at redundancy or a contingency plan for the hospital. Monitor C. Record the reasoning and feed new data into the risk model.",
+                 ["uses likelihood and consequence, not age alone", "recognises B's high consequence needs attention", "proposes condition assessment, redundancy or contingency", "documents and monitors"],
+                 "Risk-based renewal balances frequent minor failures against rare severe ones."),
     ],
 }
 
 L5 = {
     "title": "Wastewater treatment and recycled water",
     "minutes": 12,
+    "time_sensitive": True,
     "photo_query": "activated sludge aeration tank",
     "body": """Wastewater treatment protects public health and the waterways that receive the effluent. Modern plants remove organic matter, solids, **nutrients** (nitrogen and phosphorus) and pathogens, and increasingly produce **recycled water** and recover energy.
 
@@ -488,6 +503,7 @@ Discharges are licensed by **EPA Victoria**, with limits set to protect the rece
 L6 = {
     "title": "Integrated water management and a changing climate",
     "minutes": 10,
+    "time_sensitive": True,
     "photo_query": "constructed wetland stormwater",
     "body": """Expert water engineering increasingly means designing **systems**, not just pipes: linking water supply, sewerage, stormwater and waterways, and planning for a hotter, more variable climate.
 
@@ -569,7 +585,7 @@ Victorian water planning increasingly recognises Aboriginal water values and rig
 
 PACK = {
     "id": "water-advanced",
-    "version": 1,
+    "version": 2,
     "topic": "Civil and water engineering",
     "title": "Water engineering at expert level",
     "summary": "Hydraulic transients and surge protection, network modelling and calibration, sewage pump station design, asset management, wastewater treatment and recycled water, and integrated water management in a changing climate. For practising engineers.",

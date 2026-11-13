@@ -4,6 +4,8 @@
   push notification if your streak ends at midnight.
 - **Review reminder** at SIRISLEARN_REVIEW_HOUR (default 8 am): how many
   cards are due today.
+- **What's new in AI**: from SIRISLEARN_AI_UPDATE_DAY each month, the
+  month's AI news lesson (app/updates.py), tried at most once a day.
 - **Backup**: once a day, a consistent copy of the database to
   data/backups/sirislearn-YYYY-MM-DD.db, keeping the last
   SIRISLEARN_BACKUP_DAYS (default 14).
@@ -18,7 +20,7 @@ import asyncio
 import logging
 from datetime import datetime
 
-from app import config, push, spaced
+from app import config, push, spaced, updates
 from app.db import Store, get_store, local_day
 from app.progress import streak
 
@@ -69,6 +71,11 @@ async def tick(store: Store, now: datetime | None = None) -> list[str]:
             await push.send(store, f"{due} card{'s' if due != 1 else ''} to review",
                             "A few minutes of review keeps what you've learned.", url="/review", tag="review")
             ran.append("review")
+
+    if updates.due(store, today):
+        store.set_setting("ai_update_tried", today)
+        if await updates.run(store, today[:7]):
+            ran.append("ai-update")
     return ran
 
 

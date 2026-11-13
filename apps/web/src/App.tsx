@@ -15,6 +15,10 @@ const Lesson = lazy(() => import("./screens/Lesson").then((m) => ({ default: m.L
 const Quiz = lazy(() => import("./screens/Quiz").then((m) => ({ default: m.Quiz })));
 const Review = lazy(() => import("./screens/Quiz").then((m) => ({ default: m.Review })));
 const Exam = lazy(() => import("./screens/Quiz").then((m) => ({ default: m.Exam })));
+const Practice = lazy(() => import("./screens/Quiz").then((m) => ({ default: m.Practice })));
+const Insights = lazy(() => import("./screens/Insights").then((m) => ({ default: m.Insights })));
+const Paths = lazy(() => import("./screens/Paths").then((m) => ({ default: m.Paths })));
+const PathDetail = lazy(() => import("./screens/Paths").then((m) => ({ default: m.PathDetail })));
 const Certificate = lazy(() => import("./screens/Certificate").then((m) => ({ default: m.Certificate })));
 const History = lazy(() => import("./screens/History").then((m) => ({ default: m.History })));
 const Awards = lazy(() => import("./screens/Awards").then((m) => ({ default: m.Awards })));
@@ -57,7 +61,11 @@ function Shell({ user, onSignOut }: { user: string; onSignOut: () => void }) {
             <Route path="/course/:id" element={<Course />} />
             <Route path="/lesson/:id" element={<Lesson />} />
             <Route path="/lesson/:id/quiz" element={<Quiz />} />
+            <Route path="/lesson/:id/practice" element={<Practice />} />
             <Route path="/review" element={<Review />} />
+            <Route path="/insights" element={<Insights />} />
+            <Route path="/paths" element={<Paths />} />
+            <Route path="/path/:id" element={<PathDetail />} />
             <Route path="/course/:id/exam" element={<Exam />} />
             <Route path="/certificate/:id" element={<Certificate />} />
             <Route path="/history" element={<History />} />

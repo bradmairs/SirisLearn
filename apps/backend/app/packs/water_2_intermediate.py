@@ -1,6 +1,6 @@
 """Civil and water engineering design: intermediate."""
 
-from app.coursepacks import mcq, open_q
+from app.coursepacks import calc, mcq, open_q, scenario
 from app.packs._draw import AMBER, BLUE, GREEN, INK, MUTED, PURPLE, RED, arrow, box, circle, line, path, svg, text, title
 
 LOSSES = svg(
@@ -148,6 +148,8 @@ DN200 PVC (ID ≈ 0.2 m), L = 1000 m, Q = 30 L/s. A ≈ 0.0314 m², V ≈ 0.95 m
                ["short pipes with many fittings", "friction dominates in long mains"], "K × V²/2g adds up quickly with high local velocities."),
         open_q("Estimate the velocity of 30 L/s in a 200 mm internal diameter pipe, showing your working.", "Area = π × 0.2² / 4 ≈ 0.0314 m²; V = Q / A = 0.030 / 0.0314 ≈ 0.95 m/s.",
                ["area about 0.0314 m²", "V = Q/A", "about 0.95 m/s"], "Convert L/s to m³/s first."),
+        calc("A 500 m long pipe with an internal diameter of 150 mm carries water at 1.2 m/s. Taking the Darcy friction factor as 0.020, what is the friction head loss, in metres?", 4.89, "m",
+             "1. Velocity head V²/2g = 1.2² / 19.62 = 0.0734 m.\n2. L/D = 500 / 0.15 = 3333.\n3. h_f = f × (L/D) × V²/2g = 0.020 × 3333 × 0.0734 = 4.89 m.", "Darcy-Weisbach with the numbers substituted.", tolerance=3),
     ],
 }
 
@@ -230,6 +232,10 @@ Plot curves for minimum and maximum static head, new and aged pipes, one pump an
                ["least energy", "low flow causes recirculation and vibration", "high flow risks cavitation and overload"], "Typically within about 70-120% of BEP flow."),
         open_q("Why does a VSD save less energy on a system dominated by static head?", "Because the pump must still produce at least the static lift at any speed; with high static head the speed can't drop much before flow stops, so you can't take advantage of the cubic power saving.",
                ["must still overcome static lift", "speed can't fall far", "cubic saving mostly applies to friction-dominated systems"], "Affinity laws hold for the pump, not the system."),
+        calc("A pump delivers 30 L/s against a total head of 25 m at 70% efficiency. What shaft power does it need, in kW?", 10.5, "kW",
+             "1. Hydraulic power = ρgQH = 1000 × 9.81 × 0.030 × 25 = 7358 W.\n2. Shaft power = 7358 / 0.70 = 10 511 W ≈ 10.5 kW.", "Divide hydraulic power by efficiency.", tolerance=3),
+        calc("A pump gives 40 L/s at 1450 rpm. Using the affinity laws, roughly what flow would it give at 1160 rpm on a friction-only system?", 32, "L/s",
+             "1. Q ∝ N.\n2. Q₂ = 40 × 1160 / 1450 = 32 L/s.", "Flow scales with speed.", tolerance=2),
     ],
 }
 
@@ -305,12 +311,15 @@ When supercritical flow meets a slower downstream condition it jumps abruptly to
                ["low flow, low velocity", "solids settle", "oversizing or flat grades make it worse"], "That's why minimum grades exist."),
         open_q("Why should you check tailwater at a stormwater outlet?", "If the receiving river or channel is high during the same storm, the outlet can be drowned and the pipe will run surcharged, raising water levels upstream and possibly flooding pits; designing only on the pipe's own capacity would overestimate performance.",
                ["receiving water may be high", "pipe surcharges", "upstream flooding"], "Use a hydraulic grade line analysis from the outlet up."),
+        calc("A DN225 PVC sewer (take the internal diameter as 0.225 m) is laid at 1 in 100 with Manning's n = 0.011. What is its full-bore capacity, in L/s?", 53.1, "L/s",
+             "1. A = π × 0.225² / 4 = 0.03976 m²; R = D/4 = 0.05625 m.\n2. R^(2/3) = 0.1468; S^(1/2) = √0.01 = 0.1.\n3. V = (1/0.011) × 0.1468 × 0.1 = 1.335 m/s.\n4. Q = 1.335 × 0.03976 = 0.0531 m³/s = 53.1 L/s.", "Manning's equation for a full circular pipe.", tolerance=3),
     ],
 }
 
 L4 = {
     "title": "Designing a water main",
     "minutes": 11,
+    "time_sensitive": True,
     "photo_query": "water main installation trench",
     "body": """Designing a reticulation main for a new estate brings together demand, hydraulics and standards. In Australia the starting point is the **Water Supply Code of Australia (WSA 03)** plus your water corporation's own supplement, which overrides it where they differ.
 
@@ -391,6 +400,7 @@ Bigger isn't always better. An oversized main has low velocity, long **water age
 L5 = {
     "title": "Designing a gravity sewer",
     "minutes": 11,
+    "time_sensitive": True,
     "photo_query": "sewer manhole construction",
     "body": """Gravity sewers are designed to carry wastewater for 50-100 years with no pumping, few blockages and minimal odour. In Australia the starting point is the **Gravity Sewerage Code of Australia (WSA 02)** and the water corporation's supplement.
 
@@ -461,12 +471,17 @@ Trench safety, groundwater, rock, existing services and reinstatement drive cost
                ["tiny flows", "needs minimum grade", "grade versus depth trade-off"], "That's why head-of-line grades are steeper."),
         open_q("Why does sewer depth matter so much for cost and safety?", "Deeper sewers need bigger, shored trenches, more excavation, dewatering and reinstatement, and expose workers to collapse and confined-space hazards, so unnecessary depth increases cost and risk; depth is set by serving lots and achieving grades.",
                ["more excavation and shoring", "trench collapse and safety risk", "depth driven by lot service and grade"], "Shallow but compliant is the goal."),
+        scenario("Residents near a new estate report sewage odour at a manhole where a 1.8 km rising main discharges. The estate is only about 15% occupied so far. What do you check and what would you recommend?",
+                 "Check detention time in the rising main at today's low flows, pump run times, H₂S levels and corrosion at the discharge manhole. The main is likely sized for full development, so sewage sits for hours and goes septic. Recommend short-term chemical dosing (such as magnesium hydroxide or nitrate) and odour control or ventilation at the discharge point, sealing or lining the manhole, and adjusting pump control; longer term, stage capacity better on future projects.",
+                 ["links odour to septicity from long detention at low flows", "checks H₂S, pump cycling and corrosion", "recommends dosing or odour control", "considers staging or operational changes"],
+                 "Low early occupancy plus a long rising main is a classic septicity case."),
     ],
 }
 
 L6 = {
     "title": "Water treatment processes",
     "minutes": 10,
+    "time_sensitive": True,
     "photo_query": "water treatment plant filters",
     "body": """A water treatment plant turns raw water from a river, reservoir or bore into water that's safe and pleasant to drink. Each step is a **barrier** with a target, set within the risk-based framework of the **Australian Drinking Water Guidelines (ADWG)**.
 
@@ -536,7 +551,7 @@ The ADWG framework asks water suppliers to understand their catchment hazards an
 
 PACK = {
     "id": "water-intermediate",
-    "version": 1,
+    "version": 2,
     "topic": "Civil and water engineering",
     "title": "Water engineering design",
     "summary": "Hands-on hydraulic design: friction losses, pumps and system curves, open channel flow, designing water mains and gravity sewers to WSA codes, and how water treatment plants work. For people who know the basics.",

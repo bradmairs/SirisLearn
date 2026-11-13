@@ -1,6 +1,6 @@
 """Using AI at work: practical, safe and leading AI use in an engineering consultancy."""
 
-from app.coursepacks import mcq, open_q
+from app.coursepacks import calc, mcq, open_q, scenario
 from app.packs._draw import AMBER, BLUE, GREEN, INK, MUTED, PURPLE, RED, arrow, box, circle, line, path, svg, text, title
 
 PROMPT = svg(
@@ -99,6 +99,7 @@ LEAD = svg(
 L1 = {
     "title": "Prompting that works",
     "minutes": 9,
+    "time_sensitive": True,
     "photo_query": "",
     "body": """The difference between "AI is useless" and "AI saved me two hours" is usually the prompt. Good prompting isn't magic phrasing; it's giving the model what a capable new colleague would need.
 
@@ -179,6 +180,7 @@ That prompt has role, goal, context, constraints, format, grounding and a built-
 L2 = {
     "title": "Checking AI output",
     "minutes": 10,
+    "time_sensitive": True,
     "photo_query": "",
     "body": """The fastest way to lose credibility with AI is to pass on something it got wrong. The fastest way to gain it is to be the person who uses AI heavily **and** never gets caught out. That comes from systematic checking.
 
@@ -254,12 +256,17 @@ When reviewing juniors' work, ask how AI was used and how they checked it. Make 
                ["show how work was produced and checked", "defensible if questioned", "learn and improve"], "Simple notes are enough."),
         open_q("How can a senior engineer encourage safe rather than hidden AI use in their team?", "Make it normal to say AI was used and to ask how outputs were checked, set clear expectations for verification, share examples of AI errors caught, and review the checking as well as the result, so people don't hide AI use or skip checks.",
                ["normalise disclosure", "ask how it was checked", "share errors caught"], "Culture matters as much as policy."),
+        scenario("A graduate's draft design report cites 'AS/NZS 4130:2018 Clause 7.4' and two journal papers for a key design value. The clauses and papers look plausible but you can't find one of the papers, and the graduate mentions they used AI to help write it. What do you do?",
+                 "Treat the unverified references as possibly fabricated: check each against the actual standard and sources before the report goes anywhere, and remove or replace anything that can't be verified. Talk to the graduate without blame about how they used AI, show them how to check sources and record how outputs were verified, and make 'where did this come from?' a normal review question. Consider whether the firm's guidance needs to be clearer.",
+                 ["verifies every reference against the real source", "removes or replaces anything unverified", "coaches the graduate on checking without blame", "reinforces policy or review practice"],
+                 "Fabricated references are the most common AI failure in professional work."),
     ],
 }
 
 L3 = {
     "title": "AI across consulting work",
     "minutes": 10,
+    "time_sensitive": True,
     "photo_query": "engineers meeting office laptop",
     "body": """Knowing *where* AI adds value in a consultancy, and where it doesn't, is the most useful practical knowledge you can share with colleagues.
 
@@ -360,6 +367,7 @@ Start with tasks that are **frequent**, **text-heavy** and **easy to check**: mi
 L4 = {
     "title": "Working with company and client information",
     "minutes": 10,
+    "time_sensitive": True,
     "photo_query": "",
     "body": """The most common AI mistake in professional firms isn't a bad answer; it's putting information into the wrong tool. Knowing the data rules is essential to leading safely.
 
@@ -444,6 +452,7 @@ Enterprise assistants and RAG tools let you ask questions across project files, 
 L5 = {
     "title": "Automation and agents in practice",
     "minutes": 10,
+    "time_sensitive": True,
     "photo_query": "",
     "body": """Once people are comfortable with chat, the next step is automation: AI doing multi-step work with less hand-holding. Knowing when to automate, and how much autonomy to give, is a key leadership skill.
 
@@ -526,6 +535,7 @@ AI usage is often priced per **token** or per user. Agents use many more tokens 
 L6 = {
     "title": "AI governance in a consultancy",
     "minutes": 10,
+    "time_sensitive": True,
     "photo_query": "",
     "body": """Governance sounds bureaucratic, but done well it's what lets a firm use AI confidently. As an AI leader you may help shape it, and you should certainly be able to explain it.
 
@@ -600,12 +610,17 @@ You don't need to own governance to help it: be the person who knows the policy,
                ["follow the contract", "be open when material or asked", "never misrepresent"], "Honesty builds trust."),
         open_q("How can you act as an AI leader without owning the firm's governance?", "Know the policy and explain it simply, help colleagues use approved tools well, bring real use cases forward for approval, flag new risks and opportunities, and share lessons learned and good examples.",
                ["explain the policy", "support colleagues", "bring use cases forward", "share lessons"], "Influence beats authority."),
+        scenario("A water utility client's new contract includes a clause asking consultants to disclose how they use AI on its projects and to keep its data out of any AI tool that trains on customer data. Your project manager asks you what this means for the team. How do you respond?",
+                 "Read the clause carefully and confirm which tools the team uses and their terms. Use only approved enterprise tools that don't train on customer data, and keep the client's information out of anything else. Agree a short disclosure statement describing how AI is used and checked, and brief the team on what they can and can't do. Raise anything unclear with the client or legal, and record the approach in the project's quality plan.",
+                 ["checks tools against the contract's data terms", "restricts work to compliant approved tools", "prepares an honest disclosure statement", "briefs the team and records the approach"],
+                 "Contract conditions sit on top of the firm's own AI policy."),
     ],
 }
 
 L7 = {
     "title": "Choosing use cases and proving value",
     "minutes": 10,
+    "time_sensitive": True,
     "photo_query": "",
     "body": """Enthusiasm gets AI started; evidence keeps it going. Leaders pick the right problems and show measurable results.
 
@@ -694,12 +709,15 @@ Plot them. **Quick wins** (high value, high feasibility) go first: they build mo
                ["evidence-based decision", "avoids wasted spending", "frees resources"], "Learning counts."),
         open_q("What would you include in a business case for rolling out an AI drafting tool across the firm?", "Measured time savings from the pilot annualised across users and valued at cost rates, minus licence, usage, training and support costs; quality and speed benefits; staff and client benefits; risks and controls; and a plan for rollout and ongoing measurement.",
                ["measured savings minus costs", "quality and other benefits", "risks and controls", "rollout and measurement plan"], "Use pilot data, not survey guesses."),
+        calc("A pilot shows 25 engineers each saving about 1.5 hours a week on drafting. At 46 working weeks a year and an internal cost of $110 an hour, what's the annual value before costs, in dollars?", 189750, "$",
+             "1. Hours a year = 25 × 1.5 × 46 = 1725.\n2. Value = 1725 × $110 = $189 750.", "Use measured pilot savings, then subtract licence and support costs.", tolerance=1),
     ],
 }
 
 L8 = {
     "title": "Being the AI leader in your firm",
     "minutes": 10,
+    "time_sensitive": True,
     "photo_query": "presentation workshop engineers",
     "body": """Being "one of the AI people" in a consultancy is less about knowing the latest model and more about **judgement, generosity and staying current**. This lesson pulls the course together into habits.
 
@@ -790,7 +808,7 @@ AI changes monthly. Build a light routine:
 
 PACK = {
     "id": "ai-use",
-    "version": 1,
+    "version": 2,
     "topic": "Using AI at work",
     "title": "Leading with AI in engineering consulting",
     "summary": "Practical, safe and credible AI use for engineering consultants: prompting, checking output, where AI helps across bids, reports, reviews and scripts, handling client data, automation and agents, governance, proving value, and leading AI adoption in your firm.",

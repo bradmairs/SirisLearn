@@ -1,14 +1,50 @@
 import { useEffect, useState } from "react";
-import { Bell, BellOff, Brain, LogOut } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Bell, BellOff, Brain, LogOut, Newspaper } from "lucide-react";
 import { post, put } from "../api/client";
 import { currentSubscription, disablePush, enablePush, pushSupported } from "../api/push";
 import { useApi } from "../api/useApi";
-import type { Settings as SettingsData } from "../api/types";
+import type { AiUpdates, Settings as SettingsData } from "../api/types";
 import { Glass } from "../components/Glass";
 import { Loading, PageHead } from "../components/PageHead";
 
 const GOALS = [{ xp: 20, label: "Casual" }, { xp: 50, label: "Regular" }, { xp: 100, label: "Serious" }, { xp: 200, label: "Intense" }];
-const PURPOSES: Record<string, string> = { plan: "Planning courses", lesson: "Writing lessons", questions: "Fresh retake questions", mark: "Marking written answers", tutor: "Ask Siris" };
+const PURPOSES: Record<string, string> = {
+  plan: "Planning courses", lesson: "Writing lessons", questions: "Fresh retake questions", mark: "Marking written answers", tutor: "Ask Siris",
+  refresh: "Bringing lessons up to date", "ai-update": "Monthly AI update",
+};
+
+function AiUpdatesCard({ data, onToggle, onRan }: { data: SettingsData; onToggle: (on: boolean) => void; onRan: (next: AiUpdates) => void }) {
+  const u = data.ai_updates;
+  const [note, setNote] = useState<string | null>(null);
+  async function runNow() {
+    setNote(null);
+    try {
+      onRan(await post<AiUpdates>("/api/updates/ai"));
+      setNote("Writing this month's update. It appears in your library in a few minutes.");
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : "Couldn't start the update.");
+    }
+  }
+  return (
+    <Glass className="settings-card stack">
+      {!u.allowed ? <p className="muted">Turned off on the server (<code>SIRISLEARN_AI_UPDATES=false</code>).</p> : (
+        <>
+          <p className="muted">Each month, a lesson on the AI developments that matter for your work, written from {u.feeds} AI news feeds with its sources, in the course "What's new in AI". Time-sensitive lessons also offer to bring themselves up to date after {Math.round(data.refresh_days / 30)} months.</p>
+          <label className="toggle">
+            <input type="checkbox" checked={u.enabled} onChange={(e) => onToggle(e.target.checked)} />
+            <span><Newspaper size={15} aria-hidden="true" /> Write a monthly AI update</span>
+          </label>
+          {u.last && <p className="muted">Latest: {u.course_id ? <Link to={`/course/${u.course_id}`}>{u.last.title}</Link> : u.last.title}</p>}
+          {u.error && <p className="tone-warning">Last try: {u.error}</p>}
+          {!u.model && <p className="muted">Needs a course writer (below).</p>}
+          <div className="row"><button type="button" className="chip chip--button" onClick={runNow} disabled={!u.model || u.running}>Write this month's now</button></div>
+          {note && <p className="muted" role="status">{note}</p>}
+        </>
+      )}
+    </Glass>
+  );
+}
 
 function money(n: number): string {
   return n < 0.01 && n > 0 ? "< $0.01" : `$${n.toFixed(2)}`;
@@ -104,6 +140,9 @@ export function Settings({ onSignOut }: { onSignOut: () => void }) {
           <p className="muted">Link SirisAI (<code>SIRISAI_URL</code> and <code>SIRISAI_API_KEY</code> in the server's <code>.env</code>) to save what you learn to your Second Brain and get topic ideas from it.</p>
         )}
       </Glass>
+
+      <h2 className="section-title">What's new in AI</h2>
+      <AiUpdatesCard data={data} onToggle={(on) => void save({ ai_updates: on })} onRan={(next) => setData({ ...data, ai_updates: next })} />
 
       <h2 className="section-title">Course writer</h2>
       <Glass className="settings-card stack">

@@ -1,6 +1,6 @@
 """General AI: how modern AI works, what it can and can't do, and how it's governed."""
 
-from app.coursepacks import mcq, open_q
+from app.coursepacks import calc, mcq, open_q, scenario
 from app.packs._draw import AMBER, BLUE, GREEN, INK, MUTED, PURPLE, RED, arrow, box, circle, line, path, svg, text, title
 
 NESTED = svg(
@@ -340,6 +340,7 @@ Bigger models trained on more data with more compute have reliably got better (*
 L4 = {
     "title": "Transformers and large language models",
     "minutes": 11,
+    "time_sensitive": True,
     "photo_query": "",
     "body": """Large language models (LLMs) are the AI most people now use daily. Understanding how they're built explains both their power and their quirks.
 
@@ -411,6 +412,7 @@ Predicting the next token well across all of human text requires building intern
 L5 = {
     "title": "What AI is good and bad at",
     "minutes": 10,
+    "time_sensitive": True,
     "photo_query": "",
     "body": """Leaders in AI aren't the people who are most excited about it; they're the people who know **where it's reliable and where it isn't**, and can use it accordingly.
 
@@ -494,6 +496,7 @@ Ask three questions for any use:
 L6 = {
     "title": "Multimodal models, tools and agents",
     "minutes": 10,
+    "time_sensitive": True,
     "photo_query": "",
     "body": """Modern AI isn't just a chat box. Models can see, hear, search, run code and take actions. These capabilities are where much of the practical value, and much of the new risk, now sits.
 
@@ -573,6 +576,7 @@ Not everything needs an autonomous agent. A **workflow** with fixed steps (extra
 L7 = {
     "title": "Evaluating AI systems",
     "minutes": 10,
+    "time_sensitive": True,
     "photo_query": "",
     "body": """"Does it work?" is the most important question about any AI system, and "it looked good in the demo" isn't an answer. Evaluation is where engineering discipline adds the most value.
 
@@ -653,12 +657,15 @@ Models are updated by providers, documents change and usage drifts. Keep samplin
                ["errors may cluster", "severe consequences in specific cases", "look at failure patterns"], "Averages hide tails."),
         open_q("What is the risk of deskilling and how might a firm manage it?", "If juniors rely on AI and never do tasks themselves, they may not develop the judgement to spot errors, weakening review; manage it with training that includes doing work manually, explaining AI outputs, mentoring and reviews that test understanding.",
                ["juniors may not build judgement", "weaker review", "training and mentoring"], "Capability building is part of adoption."),
+        calc("An AI tool flags 40 drawings as having errors. A checker finds 30 of them really do, and 50 drawings in the set really have errors. What is the tool's recall, as a percentage?", 60, "%",
+             "1. Recall = correctly flagged ÷ really defective.\n2. 30 ÷ 50 = 0.60 = 60%.\n(Precision would be 30 ÷ 40 = 75%.)", "Recall counts how many real issues were found.", tolerance=1),
     ],
 }
 
 L8 = {
     "title": "Risks, ethics and regulation",
     "minutes": 11,
+    "time_sensitive": True,
     "photo_query": "",
     "body": """Knowing the risks and the rules is what separates a credible AI leader from an enthusiast. The rules are changing quickly, so learn the principles and check the current position before relying on details.
 
@@ -734,7 +741,7 @@ Beyond today's practical risks, AI developers and governments are working on lon
 
 PACK = {
     "id": "ai-general",
-    "version": 1,
+    "version": 2,
     "topic": "Artificial intelligence",
     "title": "How AI works",
     "summary": "A clear, accurate grounding in modern AI: machine learning, neural networks, transformers and LLMs, what models are good and bad at, tools, RAG and agents, evaluating AI properly, and the risks, ethics and rules (with an Australian focus). For professionals who want to be the go-to person on AI.",

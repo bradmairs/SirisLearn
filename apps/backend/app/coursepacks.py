@@ -1,7 +1,10 @@
 """Loads the built-in course packs (app/packs/*.py) into the library, once
 each. A pack is a complete course: plan, lessons and question pools, so it
 works without a model. SIRISLEARN_SEED_PACKS=false skips them; deleting a
-pack course keeps it deleted.
+pack course keeps it deleted. When a pack's `version` goes up, the course
+already in the library is upgraded in place: each lesson's content is
+replaced but its id, progress and review cards stay. Questions keep their
+ids as long as new ones are only added at the end of a lesson's list.
 
 A pack module defines PACK:
 
@@ -14,7 +17,7 @@ A pack module defines PACK:
         ]}],
     }
 
-`mcq()` and `open_q()` below keep the question lists short to write.
+`mcq()`, `open_q()`, `scenario()` and `calc()` below keep the question lists short to write.
 """
 
 from __future__ import annotations
@@ -42,6 +45,19 @@ def mcq(prompt: str, options: list[str], answer: int, explanation: str, svg: str
 def open_q(prompt: str, model_answer: str, key_points: list[str], explanation: str, svg: str = "", alt: str = "") -> dict[str, Any]:
     return {"kind": "open", "prompt": prompt, "options": [], "answer_index": -1, "model_answer": model_answer,
             "key_points": key_points, "explanation": explanation, "svg": svg, "image_alt": alt}
+
+
+def scenario(prompt: str, model_answer: str, rubric: list[str], explanation: str, svg: str = "", alt: str = "") -> dict[str, Any]:
+    """A short case to respond to, marked against the rubric (what a good response does)."""
+    return {**open_q(prompt, model_answer, rubric, explanation, svg, alt), "kind": "scenario"}
+
+
+def calc(prompt: str, answer: float, unit: str, working: str, explanation: str = "", tolerance: float = 2.0,
+         svg: str = "", alt: str = "") -> dict[str, Any]:
+    """A numeric answer, right within `tolerance` percent, with the worked solution."""
+    return {"kind": "calc", "prompt": prompt, "options": [], "answer_index": -1, "model_answer": "", "key_points": [],
+            "answer_value": answer, "tolerance": tolerance, "unit": unit, "working": working, "explanation": explanation,
+            "svg": svg, "image_alt": alt}
 
 
 def balanced(lesson: dict[str, Any], seed: str) -> dict[str, Any]:
@@ -98,13 +114,43 @@ def install(store: Store, pack: dict[str, Any]) -> str:
     return course_id
 
 
+def upgrade(store: Store, pack: dict[str, Any]) -> bool:
+    """Bring an installed pack course up to the pack's current content."""
+    course = store.one("SELECT * FROM courses WHERE pack = ? ORDER BY created_at LIMIT 1", pack["id"])
+    if course is None:
+        return False
+    lessons = store.lessons(course["id"])
+    written = [l for s in pack["sections"] for l in s["lessons"]]
+    if len(lessons) != len(written):
+        logger.warning("Course pack %s changed shape; leaving the installed copy as it is", pack["id"])
+        return False
+    for row, entry in zip(lessons, written):
+        if (row.get("content") or {}).get("refreshed_at"):
+            continue  # rewritten from the news since; keep that version
+        content = clean_lesson(balanced(entry["lesson"], pack["id"]), max_questions=None)
+        if (row.get("content") or {}).get("photo") is not None:
+            content["photo"] = row["content"]["photo"]
+        store.update("lessons", row["id"], content=content, title=entry["title"], summary=entry["summary"])
+    store.update("courses", course["id"], summary=pack["summary"], tags=pack.get("tags", []))
+    return True
+
+
 def seed(store: Store) -> list[str]:
     if config.env("SIRISLEARN_SEED_PACKS", "true").lower() in ("0", "false", "no"):
         return []
     added = []
     for pack in available():
         key = f"pack:{pack['id']}"
-        if store.setting(key):
+        installed = store.setting(key)
+        if installed:
+            if int(installed or 1) < int(pack.get("version", 1)):
+                try:
+                    if upgrade(store, pack):
+                        logger.info("Upgraded course pack %s to version %s", pack["id"], pack.get("version"))
+                except Exception:
+                    logger.exception("Couldn't upgrade course pack %s", pack["id"])
+                    continue
+                store.set_setting(key, str(pack.get("version", 1)))
             continue
         try:
             install(store, pack)

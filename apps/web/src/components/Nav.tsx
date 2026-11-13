@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Award, History, House, Library, LogOut, Settings, X } from "lucide-react";
+import { Award, History, House, Library, LogOut, Route, Settings, Target, X } from "lucide-react";
 import { APP_VERSION } from "../version";
 import { Glass } from "./Glass";
 import { Logo } from "./Logo";
@@ -9,6 +9,8 @@ import { Logo } from "./Logo";
 export const NAV: { to: string; label: string; Icon: typeof House; end: boolean; dock?: boolean }[] = [
   { to: "/", label: "Today", Icon: House, end: true },
   { to: "/library", label: "Library", Icon: Library, end: false },
+  { to: "/paths", label: "Paths", Icon: Route, end: false, dock: false },
+  { to: "/insights", label: "Weak spots", Icon: Target, end: false, dock: false },
   { to: "/history", label: "History", Icon: History, end: false },
   { to: "/awards", label: "Awards", Icon: Award, end: false },
   { to: "/settings", label: "Settings", Icon: Settings, end: false, dock: false },
