@@ -3,11 +3,11 @@
 Read [README.md](README.md) (the handover) first. SirisLearn follows the
 SirisOS conventions: same design system, same versioning.
 
-## Versions and shipping
+## Versions and shipping (Brad's standing instructions)
 
-- **Bump the version in every pull request**: `scripts/bump-version.sh patch` (+0.01) for fixes and small changes, `scripts/bump-version.sh minor` (+0.1) for a new feature or screen. Fill in the `docs/releases/<version>.md` it starts. See [docs/releases.md](docs/releases.md).
-- **Merge to main automatically** (Brad's standing instruction): open the pull request, wait for CI to go green, then mark it ready and merge it (squash) without asking. Fix red CI first; never merge red.
-- Merging a `VERSION` change tags `v<version>` and publishes the GitHub release.
+- **Bump the version in every pull request.** Versions are **Section.Feature.Fix** (e.g. 2.6.1), the same rule as SirisOS and SirisAI: `scripts/bump-version.sh fix` (+0.0.1) for a fix or minor change; `scripts/bump-version.sh feature` (+0.1.0) for a new feature or a bigger upgrade; `scripts/bump-version.sh section` (+1.0.0) only for a significant new section. Fill in the `docs/releases/<version>.md` it starts. If CI's version check says main has moved on, run `scripts/bump-version.sh rebase`. See [docs/releases.md](docs/releases.md).
+- Merging a `VERSION` change tags `v<version>` and publishes the GitHub release by itself.
+- **Merge and deploy automatically**: open the pull request, wait for CI to go green, merge it (squash) and deploy, without being asked. Never merge red.
 
 ## Checks before pushing
 
